@@ -8,6 +8,10 @@ Entries here move to [Breaking Changes](/install/reference/breaking-changes) aut
 
 ## What has changed?
 
+#### Enterprise features removed; only the MIT Community Edition remains
+
+The edition is always Community (`AP_EDITION=ce`), and SSO, SAML, SCIM, API keys, project roles, git sync, audit logs, secret managers, worker groups, AI agents, managed AI credits, email sending and the embed SDK are gone. The database migrations were replaced by a single baseline, so only fresh installs are supported: an existing database cannot be upgraded and must be recreated.
+
 #### RabbitMQ 0.2.0: the Send Message actions are no longer AI agent tools, and their output changes
 
 **Send Message to Queue** and **Send Message to Exchange** (shown before as `sendMessageToQueue` and `sendMessageToExchange`) are now shown only in the flow builder. AI agents and MCP clients get **Publish to Queue** and **Publish to Exchange** instead.

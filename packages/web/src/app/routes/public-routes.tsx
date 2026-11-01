@@ -9,10 +9,6 @@ import { TemplateDetailsWrapper } from '../guards/template-details-wrapper';
 
 import NotFoundPage from './404-page';
 import AuthenticatePage from './authenticate';
-import { EmbedPage } from './embed';
-import { EmbeddedConnectionDialog } from './embed/embedded-connection-dialog';
-import { EmbeddedMcpAuthorizeDialog } from './embed/embedded-mcp-authorize-dialog';
-import { EmbeddedMcpSettingsDialog } from './embed/embedded-mcp-settings-dialog';
 import { McpAuthorizePage } from './mcp-authorize';
 import { RedirectPage } from './redirect';
 
@@ -34,22 +30,6 @@ function SuspenseWrapper({ children }: { children: React.ReactNode }) {
 }
 
 export const publicRoutes = [
-  {
-    path: '/embed',
-    element: <EmbedPage></EmbedPage>,
-  },
-  {
-    path: '/embed/connections',
-    element: <EmbeddedConnectionDialog></EmbeddedConnectionDialog>,
-  },
-  {
-    path: '/embed/mcp',
-    element: <EmbeddedMcpSettingsDialog></EmbeddedMcpSettingsDialog>,
-  },
-  {
-    path: '/embed/mcp-authorize',
-    element: <EmbeddedMcpAuthorizeDialog></EmbeddedMcpAuthorizeDialog>,
-  },
   {
     path: '/authenticate',
     element: <AuthenticatePage />,

@@ -1,8 +1,8 @@
 import { ActivepiecesError, ErrorCode, PlatformUsageMetric } from '@activepieces/core-utils'
 import { McpServerType, McpToolResult, PopulatedMcpServer } from '@activepieces/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { INTERNAL_CHAT_CLIENT_ID } from '../../../../src/app/mcp/oauth/token/mcp-oauth-token.service'
 import { MCP_CALL_CREDITS, McpCallBilling, mcpUsageTracker, withCallBilling } from '../../../../src/app/mcp/mcp-usage-tracker'
+import { INTERNAL_CHAT_CLIENT_ID } from '../../../../src/app/mcp/oauth/token/mcp-oauth-token.service'
 
 const { mockTrackBillingAndSendTelemetry, mockGetOrCreateForPlatform, mockGetProject, mockAssertCredits } = vi.hoisted(() => ({
     mockTrackBillingAndSendTelemetry: vi.fn().mockResolvedValue(undefined),
@@ -18,10 +18,6 @@ vi.mock('../../../../src/app/platform/billing-provider', () => ({
 
 vi.mock('../../../../src/app/platform/billing-and-telemetry', () => ({
     trackBillingAndSendTelemetry: mockTrackBillingAndSendTelemetry,
-}))
-
-vi.mock('../../../../src/app/ee/platform/platform-plan/platform-plan.service', () => ({
-    platformPlanService: () => ({ getOrCreateForPlatform: mockGetOrCreateForPlatform }),
 }))
 
 vi.mock('../../../../src/app/project/project-service', () => ({

@@ -323,15 +323,6 @@ describe('AI Providers API', () => {
             expect(response?.statusCode).toBe(StatusCodes.NO_CONTENT)
         })
 
-        it('still allows a non-admin platform member to list providers for their project', async () => {
-            const memberCtx = await createMemberContext(app!, ctx, {
-                projectRole: DefaultProjectRole.VIEWER,
-            })
-
-            const response = await memberCtx.get('/v1/ai-providers', { projectId: ctx.project.id })
-
-            expect(response?.statusCode).toBe(StatusCodes.OK)
-        })
     })
 
     describe('multiple keys per provider', () => {
@@ -536,39 +527,6 @@ describe('AI Providers API', () => {
             expect(response?.statusCode).toBe(StatusCodes.OK)
             const customRow = response?.json().find((p: { provider: string }) => p.provider === AIProviderName.CUSTOM)
             expect(customRow.enabledForChat).toBe(true)
-        })
-
-        it('serves chat from the managed Activepieces key when no key is enabled for chat', async () => {
-            process.env.AP_OPENROUTER_PROVISION_KEY = 'test-provision-key'
-            try {
-                await mockAndSaveAIProvider({
-                    platformId: ctx.platform.id,
-                    provider: AIProviderName.ACTIVEPIECES,
-                    displayName: 'Activepieces',
-                    enabledForChat: false,
-                })
-                await mockAndSaveAIProvider({
-                    platformId: ctx.platform.id,
-                    provider: AIProviderName.CUSTOM,
-                    displayName: 'Not picked for chat',
-                    config: customConfig('https://byo.example.com'),
-                })
-
-                const response = await engineGet('/api/v1/ai-providers', ctx.project.id)
-
-                expect(response?.statusCode).toBe(StatusCodes.OK)
-                const chatProviders = response?.json().filter((p: { enabledForChat: boolean }) => p.enabledForChat)
-                expect(chatProviders.map((p: { provider: string }) => p.provider)).toEqual([AIProviderName.ACTIVEPIECES])
-
-                const served = await aiProviderService(app!.log).getChatProvider({
-                    platformId: ctx.platform.id,
-                    scope: { type: 'project', projectId: ctx.project.id },
-                })
-                expect(served?.provider).toBe(AIProviderName.ACTIVEPIECES)
-            }
-            finally {
-                delete process.env.AP_OPENROUTER_PROVISION_KEY
-            }
         })
 
         it('lists a specific key models through the admin configuration route', async () => {

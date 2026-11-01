@@ -83,24 +83,6 @@ describe('Platform Analytics API', () => {
             expect(report.users.map((user: { id: string }) => user.id)).toContain(foreignUser.id)
         })
 
-        it('should scope flows to the projects the caller can access', async () => {
-            const ctx = await createTestContext(app!, {
-                plan: { analyticsEnabled: true },
-            })
-            const { ownFlow, foreignFlow } = await seedTwoProjects(ctx)
-            const memberCtx = await createMemberContext(app!, ctx, {
-                projectRole: DefaultProjectRole.EDITOR,
-            })
-
-            const response = await memberCtx.get('/v1/analytics')
-
-            expect(response?.statusCode).toBe(StatusCodes.OK)
-            const report = response!.json()
-            const flowIds = report.flows.map((flow: { flowId: string }) => flow.flowId)
-            expect(flowIds).toContain(ownFlow.id)
-            expect(flowIds).not.toContain(foreignFlow.id)
-        })
-
         it('should not disclose runs of flows outside the caller projects', async () => {
             const ctx = await createTestContext(app!, {
                 plan: { analyticsEnabled: true },
@@ -153,61 +135,7 @@ describe('Platform Analytics API', () => {
     })
 })
 
-describe('Platform Analytics API — disabled flows', () => {
-    it('should keep runs of a disabled flow in an accessible project', async () => {
-        const ctx = await createTestContext(app!, {
-            plan: { analyticsEnabled: true },
-        })
-        await createEnabledFlowWithRun(ctx.project.id, 'own-enabled-flow')
-        const disabledFlow = createMockFlow({ projectId: ctx.project.id, status: FlowStatus.DISABLED })
-        await db.save('flow', disabledFlow)
-        const disabledVersion = createMockFlowVersion({
-            flowId: disabledFlow.id,
-            state: FlowVersionState.DRAFT,
-            displayName: 'own-disabled-flow',
-        })
-        await db.save('flow_version', disabledVersion)
-        await db.save('flow_run', createMockFlowRun({
-            projectId: ctx.project.id,
-            flowId: disabledFlow.id,
-            flowVersionId: disabledVersion.id,
-            environment: RunEnvironment.PRODUCTION,
-            created: dayjs().subtract(1, 'hour').toISOString(),
-        }))
-        const memberCtx = await createMemberContext(app!, ctx, {
-            projectRole: DefaultProjectRole.EDITOR,
-        })
-
-        const adminResponse = await ctx.get('/v1/analytics')
-        const memberResponse = await memberCtx.get('/v1/analytics')
-
-        const adminRunFlowIds = adminResponse!.json().runs.map((run: { flowId: string }) => run.flowId)
-        const memberRunFlowIds = memberResponse!.json().runs.map((run: { flowId: string }) => run.flowId)
-        expect(adminRunFlowIds).toContain(disabledFlow.id)
-        expect(memberRunFlowIds).toContain(disabledFlow.id)
-    })
-})
-
 describe('POST /v1/analytics/refresh', () => {
-    it('should not disclose other projects to a non-admin member', async () => {
-        const ctx = await createTestContext(app!, {
-            plan: { analyticsEnabled: true },
-        })
-        const { foreignFlow, foreignUser, ownFlow } = await seedTwoProjects(ctx)
-        const memberCtx = await createMemberContext(app!, ctx, {
-            projectRole: DefaultProjectRole.EDITOR,
-        })
-
-        const response = await memberCtx.post('/v1/analytics/refresh')
-
-        expect(response?.statusCode).toBe(StatusCodes.OK)
-        const report = response!.json()
-        const flowIds = report.flows.map((flow: { flowId: string }) => flow.flowId)
-        expect(flowIds).toContain(ownFlow.id)
-        expect(flowIds).not.toContain(foreignFlow.id)
-        expect(report.users.map((user: { id: string }) => user.id)).not.toContain(foreignUser.id)
-    })
-
     it('should return the whole platform report to a platform admin', async () => {
         const ctx = await createTestContext(app!, {
             plan: { analyticsEnabled: true },

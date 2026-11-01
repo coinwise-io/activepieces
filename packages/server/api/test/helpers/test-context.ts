@@ -1,11 +1,9 @@
-import { ProjectRole } from '@activepieces/core-utils'
-import { DefaultProjectRole, Platform, PlatformPlan, PlatformRole, PrincipalType, Project, User, UserIdentity } from '@activepieces/shared'
+import { DefaultProjectRole, Platform, PlatformPlan, PlatformRole, PrincipalType, Project, ProjectType, User, UserIdentity } from '@activepieces/shared'
 import { FastifyInstance, InjectOptions } from 'fastify'
+import { databaseConnection } from '../../src/app/database/database-connection'
 import { generateMockToken } from './auth'
-import { db } from './db'
 import {
-    createMockApiKey,
-    createMockProjectMember,
+    createMockProject,
     mockAndSaveBasicSetup,
     mockBasicUser,
 } from './mocks'
@@ -35,7 +33,7 @@ export async function createTestContext(app: FastifyInstance, params?: TestConte
 export async function createMemberContext(
     app: FastifyInstance,
     parentCtx: TestContext,
-    params: MemberContextParams,
+    _params: MemberContextParams,
 ): Promise<TestContext> {
     const { mockUser, mockUserIdentity } = await mockBasicUser({
         user: {
@@ -43,18 +41,12 @@ export async function createMemberContext(
             platformRole: PlatformRole.MEMBER,
         },
     })
-
-    const projectRole = await db.findOneByOrFail<ProjectRole>('project_role', {
-        name: params.projectRole,
-    })
-
-    const mockProjectMember = createMockProjectMember({
-        userId: mockUser.id,
+    const personalProject = createMockProject({
+        ownerId: mockUser.id,
         platformId: parentCtx.platform.id,
-        projectId: parentCtx.project.id,
-        projectRoleId: projectRole.id,
+        type: ProjectType.PERSONAL,
     })
-    await db.save('project_member', mockProjectMember)
+    await databaseConnection().getRepository('project').save(personalProject)
 
     const token = await generateMockToken({
         id: mockUser.id,
@@ -66,26 +58,8 @@ export async function createMemberContext(
         userIdentity: mockUserIdentity,
         user: mockUser,
         platform: parentCtx.platform,
-        project: parentCtx.project,
+        project: personalProject,
         token,
-    })
-}
-
-export async function createServiceContext(
-    app: FastifyInstance,
-    parentCtx: TestContext,
-): Promise<TestContext> {
-    const mockApiKey = createMockApiKey({
-        platformId: parentCtx.platform.id,
-    })
-    await db.save('api_key', mockApiKey)
-
-    return buildContext(app, {
-        userIdentity: parentCtx.userIdentity,
-        user: parentCtx.user,
-        platform: parentCtx.platform,
-        project: parentCtx.project,
-        token: mockApiKey.value,
     })
 }
 

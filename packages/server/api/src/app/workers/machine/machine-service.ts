@@ -50,7 +50,7 @@ async function buildSettingsResponse(_log: FastifyBaseLogger): Promise<WorkerSet
         FILE_STORAGE_LOCATION: system.getOrThrow(AppSystemProp.FILE_STORAGE_LOCATION),
         S3_USE_SIGNED_URLS: system.getOrThrow(AppSystemProp.S3_USE_SIGNED_URLS),
         EVENT_DESTINATION_TIMEOUT_SECONDS: system.getNumberOrThrow(AppSystemProp.EVENT_DESTINATION_TIMEOUT_SECONDS),
-        EDITION: system.getOrThrow(AppSystemProp.EDITION),
+        EDITION: system.getEdition(),
         SSRF_ALLOW_LIST: system.get(AppSystemProp.SSRF_ALLOW_LIST)?.split(',').map(f => f.trim()) ?? [],
         ENFORCE_CONNECTION_PIECE_BINDING: system.getBoolean(AppSystemProp.ENFORCE_CONNECTION_PIECE_BINDING) ?? false,
         NETWORK_MODE: system.getOrThrow<NetworkMode>(AppSystemProp.NETWORK_MODE),

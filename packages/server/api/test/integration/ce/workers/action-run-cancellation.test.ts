@@ -1,7 +1,7 @@
 import { apId } from '@activepieces/core-utils'
 import { ExecuteActionJobData, FlowActionType, LATEST_JOB_DATA_SCHEMA_VERSION, WorkerJobType } from '@activepieces/shared'
-import { FastifyInstance } from 'fastify'
 import { Job } from 'bullmq'
+import { FastifyInstance } from 'fastify'
 import { redisConnections } from '../../../../src/app/database/redis-connections'
 import { QueueName } from '../../../../src/app/workers/job'
 import { jobBroker } from '../../../../src/app/workers/job-queue/job-broker'

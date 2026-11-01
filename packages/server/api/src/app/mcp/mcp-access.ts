@@ -1,8 +1,6 @@
 import { isNil, Permission } from '@activepieces/core-utils'
 import { McpReachResponse, McpToolResult, Project, ProjectType } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
-import { editionRequiresRbac } from '../ee/authentication/project-role/rbac-middleware'
-import { projectMemberService } from '../ee/projects/project-members/project-member.service'
 import { projectService } from '../project/project-service'
 import { userService } from '../user/user-service'
 import { deny } from './mcp-permissions'
@@ -39,10 +37,6 @@ async function hasMcpAccessToProject({ platformId, userId, projectId, log }: Use
     if (isNil(project) || project.platformId !== platformId || !isVisibleToUser({ project, userId })) {
         return false
     }
-    if (editionRequiresRbac()) {
-        const role = await projectMemberService(log).getRole({ userId, projectId })
-        return role?.permissions?.includes(Permission.READ_MCP) ?? false
-    }
     const isPrivileged = await isUserPrivileged({ userId, log })
     const projects = await listProjectsForUser({ platformId, userId, isPrivileged, log })
     return projects.some((accessibleProject) => accessibleProject.id === projectId)
@@ -63,13 +57,7 @@ async function listProjectsForUser({ platformId, userId, isPrivileged, log }: Us
     const allProjects = await projectService(log).getAllForUser({ platformId, userId, isPrivileged })
     const projects = allProjects.filter((project) => isVisibleToUser({ project, userId }))
 
-    if (!editionRequiresRbac() || isPrivileged || projects.length === 0) {
-        return projects
-    }
-
-    const projectIdsGrantingMcp = new Set(await projectMemberService(log).listProjectIdsWithPermission({ userId, platformId, permission: Permission.READ_MCP }))
-
-    return projects.filter((project) => project.ownerId === userId || projectIdsGrantingMcp.has(project.id))
+    return projects
 }
 
 function isVisibleToUser({ project, userId }: { project: Project, userId: string }): boolean {

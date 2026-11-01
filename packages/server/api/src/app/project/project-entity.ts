@@ -1,12 +1,10 @@
 import {
     AppConnection,
     Cell,
-    ConcurrencyPool,
     Field,
     File,
     Flow,
     Folder,
-    PieceSet,
     Platform,
     Project,
     Record,
@@ -34,8 +32,6 @@ type ProjectSchema = Project & {
     records: Record[]
     cells: Cell[]
     tableWebhooks: TableWebhook[]
-    pool?: ConcurrencyPool | null
-    pieceSet?: PieceSet | null
 }
 
 export const ProjectEntity = new EntitySchema<ProjectSchema>({
@@ -225,26 +221,6 @@ export const ProjectEntity = new EntitySchema<ProjectSchema>({
             type: 'one-to-many',
             target: 'table_webhook',
             inverseSide: 'project',
-        },
-        pool: {
-            type: 'many-to-one',
-            target: 'concurrency_pool',
-            onDelete: 'SET NULL',
-            nullable: true,
-            joinColumn: {
-                name: 'poolId',
-                foreignKeyConstraintName: 'fk_project_pool_id',
-            },
-        },
-        pieceSet: {
-            type: 'many-to-one',
-            target: 'piece_set',
-            onDelete: 'SET NULL',
-            nullable: true,
-            joinColumn: {
-                name: 'pieceSetId',
-                foreignKeyConstraintName: 'fk_project_piece_set_id',
-            },
         },
     },
 })

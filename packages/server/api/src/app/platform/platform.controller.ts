@@ -1,22 +1,13 @@
-import { ActivepiecesError, ApId, assertNotNullOrUndefined, ErrorCode, isNil, tryCatch } from '@activepieces/core-utils'
-import { apDayjs } from '@activepieces/server-utils'
-import { ApEdition, AuthenticationResponse, CreatePlatformRequest, FileType, hasActiveSubscription, PLATFORM_PURGE_DELAY_DAYS, PlatformResponse, PrincipalType, SERVICE_KEY_SECURITY_OPENAPI, UpdatePlatformRequestBody } from '@activepieces/shared'
+import { ActivepiecesError, ApId, ErrorCode } from '@activepieces/core-utils'
+import { ApEdition, AuthenticationResponse, CreatePlatformRequest, FileType, PlatformResponse, PrincipalType, SERVICE_KEY_SECURITY_OPENAPI, UpdatePlatformRequestBody } from '@activepieces/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
 import { securityAccess } from '../core/security/authorization/fastify-security'
-import { chatVisibilityHelper } from '../ee/agent/chat-visibility-helper'
-import { platformToEditMustBeOwnedByCurrentUser } from '../ee/authentication/ee-authorization'
-import { emailService } from '../ee/helper/email/email-service'
-import { platformPlanService } from '../ee/platform/platform-plan/platform-plan.service'
-import { beginPlatformTeardown } from '../ee/platform/platform-teardown-jobs'
 import { fileService } from '../file/file.service'
 import { attachMultipartFieldsToBody } from '../helper/multipart-body'
 import { networkUtils } from '../helper/network-utils'
 import { system } from '../helper/system/system'
-import { SystemJobName } from '../helper/system-jobs/common'
-import { systemJobsSchedule } from '../helper/system-jobs/system-job'
-import { userIdentityHelper } from '../helper/user-identity-helper'
 import { userService } from '../user/user-service'
 import { platformService } from './platform.service'
 
@@ -102,20 +93,7 @@ export const platformController: FastifyPluginAsyncZod = async (app) => {
                 },
             })
         }
-        const platform = await platformService(req.log).getOneWithPlanAndUsageOrThrow(req.principal.platform.id)
-        if (req.principal.type === PrincipalType.USER) {
-            const isEmbedded = await userIdentityHelper(req.log).isUserEmbedded(req.principal.id)
-            const chatEnabled = chatVisibilityHelper.resolveChatEnabledForUser({ platform, isEmbedded })
-            return {
-                ...platform,
-                plan: {
-                    ...platform.plan,
-                    chatEnabled,
-                    ...(isEmbedded ? { licenseKey: null } : {}),
-                },
-            }
-        }
-        return platform
+        return platformService(req.log).getOneWithPlanAndUsageOrThrow(req.principal.platform.id)
     })
 
     app.get('/assets/:id', GetAssetRequest, async (req, reply) => {
@@ -134,60 +112,6 @@ export const platformController: FastifyPluginAsyncZod = async (app) => {
             .send(data)
     })
 
-
-    if (edition === ApEdition.CLOUD) {
-        app.delete('/:id', DeletePlatformRequest, async (req, res) => {
-            await platformToEditMustBeOwnedByCurrentUser.call(app, req, res)
-            assertNotNullOrUndefined(req.principal.platform.id, 'platformId')
-            const platformId = req.params.id
-            const platformPlan = await platformPlanService(req.log).getOrCreateForPlatform(platformId)
-            if (hasActiveSubscription(platformPlan.plan)) {
-                throw new ActivepiecesError({
-                    code: ErrorCode.DOES_NOT_MEET_BUSINESS_REQUIREMENTS,
-                    params: {
-                        message: 'Cancel your subscription before deleting this platform',
-                    },
-                })
-            }
-
-            const owner = await userService(req.log).getMetaInformation({
-                id: req.principal.id,
-            })
-            const purgeDate = apDayjs().add(PLATFORM_PURGE_DELAY_DAYS, 'day')
-
-            await systemJobsSchedule(req.log).upsertJob({
-                job: {
-                    name: SystemJobName.HARD_DELETE_PLATFORM,
-                    data: { platformId },
-                    jobId: `hard-delete-platform-${platformId}`,
-                },
-                schedule: {
-                    type: 'one-time',
-                    date: purgeDate,
-                },
-                customConfig: {
-                    attempts: 25,
-                    backoff: {
-                        type: 'fixed',
-                        delay: 60000,
-                    },
-                },
-            })
-
-            await beginPlatformTeardown({ platformId, log: req.log })
-
-            const { error: emailError } = await tryCatch(() => emailService(req.log).sendPlatformDeleted({
-                platformId,
-                email: owner.email,
-                purgeDate: purgeDate.format('MMMM D, YYYY'),
-            }))
-            if (!isNil(emailError)) {
-                req.log.error({ error: emailError, platform: { id: platformId } }, 'Platform deleted but the confirmation email failed')
-            }
-
-            return res.status(StatusCodes.NO_CONTENT).send()
-        })
-    }
 }
 
 const CreatePlatformEndpoint = {
@@ -233,17 +157,6 @@ const GetPlatformRequest = {
         response: {
             [StatusCodes.OK]: PlatformResponse,
         },
-    },
-}
-
-const DeletePlatformRequest = {
-    config: {
-        security: securityAccess.platformAdminOnly([PrincipalType.USER]),
-    },
-    schema: {
-        params: z.object({
-            id: ApId,
-        }),
     },
 }
 

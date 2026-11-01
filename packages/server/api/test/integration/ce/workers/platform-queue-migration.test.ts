@@ -1,9 +1,9 @@
 import { apId } from '@activepieces/core-utils'
 import { FlowTriggerType, LATEST_JOB_DATA_SCHEMA_VERSION, WorkerGroupScope, WorkerJobType } from '@activepieces/shared'
 import { FastifyInstance } from 'fastify'
-import { workerGroupQueues } from '../../../../src/app/workers/worker-groups/worker-group-queues'
 import { jobQueue } from '../../../../src/app/workers/job-queue/job-queue'
 import { platformQueueMigrationService } from '../../../../src/app/workers/worker-groups/queue-migration.service'
+import { workerGroupQueues } from '../../../../src/app/workers/worker-groups/worker-group-queues'
 import { setupTestEnvironment, teardownTestEnvironment } from '../../../helpers/test-setup'
 
 let app: FastifyInstance

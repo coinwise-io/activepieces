@@ -89,10 +89,7 @@ async function listUserIdsForProjects({ platformId, projectIds }: ListUserIdsFor
         .createQueryBuilder('u')
         .select('u.id', 'id')
         .where('u."platformId" = :platformId', { platformId })
-        .andWhere(
-            '(u.id IN (SELECT pm."userId" FROM project_member pm WHERE pm."projectId" IN (:...projectIds)) OR u.id IN (SELECT p."ownerId" FROM project p WHERE p.id IN (:...projectIds)))',
-            { projectIds },
-        )
+        .andWhere('u.id IN (SELECT p."ownerId" FROM project p WHERE p.id IN (:...projectIds))', { projectIds })
         .getRawMany<{ id: string }>()
     return rows.map((row) => row.id)
 }

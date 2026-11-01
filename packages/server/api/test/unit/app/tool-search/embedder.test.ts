@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+    l2normalize,
     OPENAI_3_SMALL_DIMENSIONS,
     OPENAI_3_SMALL_MODEL_VERSION,
     OPENAI_3_SMALL_TAU,
-    l2normalize,
     selectEmbedder,
 } from '../../../../src/app/tool-search/embedder'
 

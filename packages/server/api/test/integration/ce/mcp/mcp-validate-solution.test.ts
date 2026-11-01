@@ -123,7 +123,7 @@ describe('ap_validate_flow with folderName', () => {
 
         const messages = await issueMessages(mcp)
 
-        expect(messages).toContainEqual(expect.stringContaining("A Callable Flow puts its inputs under data: {{trigger['output'].orderId}} → {{trigger['output'].data.orderId}}"))
+        expect(messages).toContainEqual(expect.stringContaining('A Callable Flow puts its inputs under data: {{trigger[\'output\'].orderId}} → {{trigger[\'output\'].data.orderId}}'))
     })
 
     it.each([
@@ -142,7 +142,7 @@ describe('ap_validate_flow with folderName', () => {
 
         const messages = await issueMessages(mcp)
 
-        expect(messages).toContainEqual(expect.stringContaining("{{trigger['output'].data.orderId}}"))
+        expect(messages).toContainEqual(expect.stringContaining('{{trigger[\'output\'].data.orderId}}'))
     })
 
     it('reports a Call Flow that sends its payload as JSON text, which the subflow receives as one string', async () => {

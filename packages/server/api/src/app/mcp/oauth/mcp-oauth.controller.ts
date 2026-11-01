@@ -1,13 +1,9 @@
-import { isNil, tryCatch } from '@activepieces/core-utils'
+import { isNil } from '@activepieces/core-utils'
 import { McpOAuthClientKey, McpServerType, PopulatedMcpServer, TelemetryEventName } from '@activepieces/shared'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { FastifyBaseLogger, FastifyReply, FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
-import { repoFactory } from '../../core/db/repo-factory'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
-import { AgentConversationEntity } from '../../ee/agent/agent-conversation-entity'
-import { agentHelpers } from '../../ee/agent/agent-helpers'
-import { CONVERSATION_ID_HEADER } from '../../ee/agent/mcp/agent-mcp'
 import { domainHelper } from '../../helper/domain-helper'
 import { rejectedPromiseHandler } from '../../helper/promise-handler'
 import { telemetry, telemetryDedupe } from '../../helper/telemetry.utils'
@@ -70,14 +66,7 @@ function registerMcpEndpoint(app: Parameters<FastifyPluginAsyncZod>[0], scope: M
             return unauthorized({ req, reply, scope, message: 'Invalid project or token.', invalidToken: true })
         }
 
-        const conversationId = req.headers[CONVERSATION_ID_HEADER] as string | undefined
-        const conversationProjectId = !isNil(conversationId)
-            ? await resolveConversationProjectId({ conversationId, identity, log: req.log })
-            : null
-        const serverMcp = conversationProjectId
-            ? await mcpServerService(req.log).getPopulatedByProjectId(conversationProjectId) ?? mcp
-            : mcp
-        const { server } = await mcpServerService(req.log).buildServer({ mcp: serverMcp, userId, platformId, clientKey: identity.clientKey, clientId: identity.clientId, isInAppChat: isInAppChatIdentity(identity) })
+        const { server } = await mcpServerService(req.log).buildServer({ mcp, userId, platformId, clientKey: identity.clientKey, clientId: identity.clientId, isInAppChat: isInAppChatIdentity(identity) })
 
         const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
@@ -187,44 +176,8 @@ type IdentityResult =
     | { status: 'invalid' }
     | { status: 'unavailable' }
 
-const chatConversationRepo = repoFactory(AgentConversationEntity)
-
 function isInAppChatIdentity(identity: ResolvedIdentity): boolean {
     return identity.type === McpServerType.PLATFORM && identity.clientId === INTERNAL_CHAT_CLIENT_ID
-}
-
-async function resolveConversationProjectId({ conversationId, identity, log }: {
-    conversationId: string
-    identity: ResolvedIdentity
-    log: FastifyBaseLogger
-}): Promise<string | null> {
-    const { data: conversation, error } = await tryCatch(async () =>
-        chatConversationRepo().findOne({ where: { id: conversationId, userId: identity.userId }, select: ['projectId', 'platformId'] }),
-    )
-    if (error) {
-        log.warn({ error, conversation: { id: conversationId } }, 'DB error resolving conversation project')
-        return null
-    }
-    if (isNil(conversation) || isNil(conversation.projectId)) {
-        log.debug({ conversation: { id: conversationId } }, 'Conversation not found for project resolution')
-        return null
-    }
-    const conversationProjectId = conversation.projectId
-
-    if (identity.type === McpServerType.PROJECT) {
-        return conversationProjectId === identity.projectId ? conversationProjectId : null
-    }
-
-    if (conversation.platformId !== identity.platformId) {
-        log.warn({ conversation: { id: conversationId } }, 'Conversation platform does not match token platform')
-        return null
-    }
-    const userProjects = await agentHelpers.getUserProjects({ platformId: identity.platformId, userId: identity.userId, log })
-    if (!userProjects.some((project) => project.id === conversationProjectId)) {
-        log.warn({ conversation: { id: conversationId }, project: { id: conversationProjectId } }, 'User no longer has access to conversation project')
-        return null
-    }
-    return conversationProjectId
 }
 
 const McpEndpointConfig = {

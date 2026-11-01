@@ -31,7 +31,6 @@
     "packages/pieces/**",
     "packages/cli",
     "packages/tests-e2e",
-    "packages/ee/embed-sdk",
     "packages/server/**",
     "packages/core/**"
   ],

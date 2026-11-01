@@ -204,24 +204,6 @@ describe('Platform model tiers API', () => {
             expect(reorder.statusCode).toBe(StatusCodes.CONFLICT)
         })
 
-        it('lets project members and the engine read the slim list only', async () => {
-            const key = await seedKey({ testCtx: ctx })
-            await createTier({ testCtx: ctx, body: tierBody({ configId: key.id }) })
-            const member = await createMemberContext(app!, ctx, { projectRole: DefaultProjectRole.EDITOR })
-            const engineToken = await generateMockToken({ type: PrincipalType.ENGINE, id: apId(), projectId: ctx.project.id, platform: { id: ctx.platform.id } })
-
-            const memberList = await member.get(TIERS, { projectId: ctx.project.id })
-            const engineList = await app!.inject({ method: 'GET', url: `/api${TIERS}`, headers: { authorization: `Bearer ${engineToken}` } })
-            const memberAdmin = await member.get(`${TIERS}/admin`)
-            const memberCreate = await member.post(TIERS, tierBody({ configId: key.id, name: 'Member' }))
-
-            expect(memberList.statusCode).toBe(StatusCodes.OK)
-            expect(engineList.statusCode).toBe(StatusCodes.OK)
-            expect(memberList.json()[0]).toMatchObject({ mainModel: { provider: AIProviderName.CUSTOM, modelId: 'gpt-4o' }, fallbackCount: 0 })
-            expect(memberList.body).not.toContain(key.id)
-            expect(memberAdmin.statusCode).toBe(StatusCodes.FORBIDDEN)
-            expect(memberCreate.statusCode).toBe(StatusCodes.FORBIDDEN)
-        })
     })
 
     describe('delete', () => {

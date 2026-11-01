@@ -11,28 +11,6 @@ import { PlatformAnalyticsReportEntity } from '../analytics/platform-analytics-r
 import { AppConnectionEntity } from '../app-connection/app-connection.entity'
 import { OtpEntity } from '../authentication/otp/otp-entity'
 import { UserIdentityEntity } from '../authentication/user-identity/user-identity-entity'
-import { AgentConversationEntity } from '../ee/agent/agent-conversation-entity'
-import { AgentEntity } from '../ee/agent/agent-entity'
-import { AgentTaskEntity } from '../ee/agent/agent-task-entity'
-import { ChatPersonalizationEntity } from '../ee/agent/personalization/chat-personalization-entity'
-import { UserMemoryEntity } from '../ee/agent/user-memory-entity'
-import { AlertEntity } from '../ee/alerts/alerts-entity'
-import { ApiKeyEntity } from '../ee/api-keys/api-key-entity'
-import { AppSumoEntity } from '../ee/appsumo/appsumo.entity'
-import { AuditEventEntity } from '../ee/audit-logs/audit-event-entity'
-import { EmbedSubdomainEntity } from '../ee/embed-subdomain/embed-subdomain.entity'
-import { FlowApprovalRequestEntity } from '../ee/flows/flow-approval/flow-approval-request.entity'
-import { OAuthAppEntity } from '../ee/oauth-apps/oauth-app.entity'
-import { PieceSetEntity } from '../ee/pieces/piece-set/piece-set.entity'
-import { ConcurrencyPoolEntity } from '../ee/platform/concurrency-pool/concurrency-pool.entity'
-import { PlatformPlanEntity } from '../ee/platform/platform-plan/platform-plan.entity'
-import { ProjectMemberEntity } from '../ee/projects/project-members/project-member.entity'
-import { ProjectPlanEntity } from '../ee/projects/project-plan/project-plan.entity'
-import { GitRepoEntity } from '../ee/projects/project-release/git-sync/git-sync.entity'
-import { ProjectReleaseEntity } from '../ee/projects/project-release/project-release.entity'
-import { ProjectRoleEntity } from '../ee/projects/project-role/project-role.entity'
-import { SecretManagerEntity } from '../ee/secret-managers/secret-manager.entity'
-import { SigningKeyEntity } from '../ee/signing-key/signing-key-entity'
 import { EventDestinationEntity } from '../event-destinations/event-destinations.entity'
 import { FileEntity } from '../file/file.entity'
 import { FlagEntity } from '../flags/flag.entity'
@@ -95,8 +73,6 @@ function getEntities(): EntitySchema<unknown>[] {
         PieceTranslationEntity,
         PlatformEntity,
         PlatformConfigurationEntity,
-        SecretManagerEntity,
-        AlertEntity,
         UserInvitationEntity,
         AIProviderEntity,
         AiUsage5mEntity,
@@ -105,7 +81,6 @@ function getEntities(): EntitySchema<unknown>[] {
         AiUsageRunEntity,
         AiToolConfigEntity,
         PlatformModelTierEntity,
-        ProjectRoleEntity,
         TableEntity,
         FieldEntity,
         RecordEntity,
@@ -120,33 +95,14 @@ function getEntities(): EntitySchema<unknown>[] {
         KnowledgeBaseFileEntity,
         KnowledgeBaseChunkEntity,
         ToolSearchIndexEntity,
-        AgentEntity,
-        AgentConversationEntity,
-        AgentTaskEntity,
-        ChatPersonalizationEntity,
-        UserMemoryEntity,
         TriggerSourceEntity,
         WaitpointEntity,
         WaitpointSignalEntity,
         // Enterprise
-        PieceSetEntity,
-        ConcurrencyPoolEntity,
-        ProjectMemberEntity,
-        ProjectPlanEntity,
-        SigningKeyEntity,
-        OAuthAppEntity,
         OtpEntity,
-        ApiKeyEntity,
         TemplateEntity,
-        GitRepoEntity,
-        AuditEventEntity,
-        ProjectReleaseEntity,
         PlatformAnalyticsReportEntity,
-        EmbedSubdomainEntity,
-        FlowApprovalRequestEntity,
         // CLOUD
-        AppSumoEntity,
-        PlatformPlanEntity,
         EventDestinationEntity,
 
     ]

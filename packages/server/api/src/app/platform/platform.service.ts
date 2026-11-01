@@ -1,5 +1,5 @@
 import { ActivepiecesError, apId, ErrorCode, isNil, partition, PlatformId, spreadIfDefined, spreadIfNotUndefined, tryCatch, UserId } from '@activepieces/core-utils'
-import { ApEdition, AUDIT_LOG_RETENTION_MAX_DAYS, AUDIT_LOG_RETENTION_MIN_DAYS, AuthenticationResponse, OPEN_SOURCE_PLAN, Platform, PlatformPlanLimits, PlatformResponse, PlatformRole, PlatformUsage, PlatformWithoutFederatedAuth, PlatformWithoutSensitiveData, ProjectType, SsoDomainVerification, SsoDomainVerificationStatus, UpdatePlatformRequestBody, User, UserStatus } from '@activepieces/shared'
+import { ApEdition, AUDIT_LOG_RETENTION_MAX_DAYS, AUDIT_LOG_RETENTION_MIN_DAYS, AuthenticationResponse, OPEN_SOURCE_PLAN, Platform, PlatformPlanLimits, PlatformResponse, PlatformRole, PlatformUsage, PlatformWithoutFederatedAuth, PlatformWithoutSensitiveData, ProjectType, SsoDomainVerification, UpdatePlatformRequestBody, User, UserStatus } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { nanoid } from 'nanoid'
 import { EntityManager, IsNull } from 'typeorm'
@@ -8,8 +8,6 @@ import { userIdentityRepository, userIdentityService } from '../authentication/u
 import { repoFactory } from '../core/db/repo-factory'
 import { transaction } from '../core/db/transaction'
 import { distributedLock } from '../database/redis-connections'
-import { invalidateSamlClientCache } from '../ee/authentication/saml-authn/saml-client'
-import { platformPlanService } from '../ee/platform/platform-plan/platform-plan.service'
 import { defaultTheme } from '../flags/theme'
 import { buildPaginator } from '../helper/pagination/build-paginator'
 import { Order } from '../helper/pagination/paginator'
@@ -87,10 +85,9 @@ export const platformService = (log: FastifyBaseLogger) => ({
             platformId: savedPlatform.id,
         })
 
-        const platformPlan = await platformPlanService(log).onPlatformCreated(savedPlatform.id)
         const { error: telemetryError } = await tryCatch(() => telemetry(log).identifyPlatformGroup({
             platformId: savedPlatform.id,
-            properties: { name: savedPlatform.name, plan: platformPlan.plan ?? null, createdAt: savedPlatform.created },
+            properties: { name: savedPlatform.name, plan: null, createdAt: savedPlatform.created },
         }))
         if (!isNil(telemetryError)) {
             log.warn({ error: telemetryError, platform: { id: savedPlatform.id } }, 'Failed to identify the platform group')
@@ -157,26 +154,12 @@ export const platformService = (log: FastifyBaseLogger) => ({
     },
     async update(params: UpdateParams): Promise<PlatformWithoutFederatedAuth> {
         if (params.federatedAuthProviders?.saml !== undefined) {
-            const plan = await platformPlanService(log).getOrCreateForPlatform(params.id)
-            if (!plan.ssoEnabled) {
-                throw new ActivepiecesError({
-                    code: ErrorCode.FEATURE_DISABLED,
-                    params: {
-                        message: 'SSO is not enabled for this platform',
-                    },
-                })
-            }
-            if (!isNil(params.federatedAuthProviders.saml)) {
-                const platform = await this.getOneOrThrow(params.id)
-                if (platform.ssoDomainVerification?.status !== SsoDomainVerificationStatus.VERIFIED) {
-                    throw new ActivepiecesError({
-                        code: ErrorCode.VALIDATION,
-                        params: {
-                            message: 'SSO domain must be verified before configuring SAML',
-                        },
-                    })
-                }
-            }
+            throw new ActivepiecesError({
+                code: ErrorCode.FEATURE_DISABLED,
+                params: {
+                    message: 'SSO is not enabled for this platform',
+                },
+            })
         }
         const platform = params.federatedAuthProviders !== undefined
             ? await this.getOneWithFederatedAuthOrThrow(params.id)
@@ -214,15 +197,6 @@ export const platformService = (log: FastifyBaseLogger) => ({
             ...spreadIfNotUndefined('ssoDomainVerification', params.ssoDomainVerification),
             ...spreadIfDefined('pinnedPieces', params.pinnedPieces),
             ...spreadIfNotUndefined('pieceSelectorConfig', params.pieceSelectorConfig),
-        }
-        if (!isNil(params.plan)) {
-            await platformPlanService(log).update({
-                platformId: params.id,
-                ...params.plan,
-            })
-        }
-        if (!isNil(params.federatedAuthProviders?.saml)) {
-            invalidateSamlClientCache(params.id)
         }
         log.info({ platform: { id: params.id } }, 'Platform updated')
         const { saved, locked } = await transaction(async (entityManager) => {
@@ -470,12 +444,8 @@ async function finishExistingPlatform({ user, platformId, name, invalidatePrevio
     })
 }
 
-async function getUsage(log: FastifyBaseLogger, platform: PlatformWithoutFederatedAuth): Promise<PlatformUsage | undefined> {
-    const edition = system.getEdition()
-    if (edition === ApEdition.COMMUNITY) {
-        return undefined
-    }
-    return platformPlanService(log).getUsage(platform.id)
+async function getUsage(_log: FastifyBaseLogger, _platform: PlatformWithoutFederatedAuth): Promise<PlatformUsage | undefined> {
+    return undefined
 }
 
 async function getBillingEnforced(log: FastifyBaseLogger, platformId: PlatformId): Promise<boolean | undefined> {
@@ -541,14 +511,10 @@ function assertLeavesAWorkingSignInMethod({ log, before, after }: AssertLeavesAW
     }
 }
 
-async function getPlan(log: FastifyBaseLogger, platform: PlatformWithoutFederatedAuth): Promise<PlatformPlanLimits> {
-    const edition = system.getEdition()
-    if (edition === ApEdition.COMMUNITY) {
-        return {
-            ...OPEN_SOURCE_PLAN,
-        }
+async function getPlan(_log: FastifyBaseLogger, _platform: PlatformWithoutFederatedAuth): Promise<PlatformPlanLimits> {
+    return {
+        ...OPEN_SOURCE_PLAN,
     }
-    return platformPlanService(log).getOrCreateForPlatform(platform.id)
 }
 
 async function assertPersonalProjectsCanBeTurnedOff({ platform, log }: AssertPersonalProjectsCanBeTurnedOffParams): Promise<void> {
@@ -641,7 +607,6 @@ type ReadDefaultProjectIdPagesParams = {
 
 type UpdateParams = UpdatePlatformRequestBody & {
     id: PlatformId
-    plan?: Partial<PlatformPlanLimits>
     logoIconUrl?: string
     fullLogoUrl?: string
     favIconUrl?: string

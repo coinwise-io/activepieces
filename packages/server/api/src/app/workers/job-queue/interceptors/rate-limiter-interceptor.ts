@@ -6,7 +6,6 @@ import { FastifyBaseLogger } from 'fastify'
 import { z } from 'zod'
 import { getConcurrencyPoolParkedKey, getConcurrencyPoolSetKey, getPlatformPlanNameKey, PLATFORM_PLAN_NAME_TTL_SECONDS } from '../../../database/redis/keys'
 import { distributedStore, redisConnections } from '../../../database/redis-connections'
-import { concurrencyPoolService } from '../../../ee/platform/concurrency-pool/concurrency-pool.service'
 import { system } from '../../../helper/system/system'
 import { AppSystemProp } from '../../../helper/system/system-props'
 import { platformService } from '../../../platform/platform.service'
@@ -60,19 +59,7 @@ async function getMaxConcurrentJobsForPlatformPlan({ platformId, log }: { platfo
     return getConcurrentJobsLimitForCloudPlan(planName)
 }
 
-async function getMaxConcurrentJobs({ poolId, platformId, projectId, log }: { poolId: string | null, platformId: PlatformId, projectId: string, log: FastifyBaseLogger }): Promise<number> {
-    // Explicit per-project limit (set via the By-project table / concurrency pool) overrides the
-    // self-hosted default, but on cloud it is clamped to the platform plan's limit.
-    if (!isNil(poolId)) {
-        const { data: value, error } = await tryCatch(() => concurrencyPoolService(log).getPoolLimit(poolId))
-        if (error === null && !isNil(value)) {
-            if (system.getEdition() !== ApEdition.CLOUD) {
-                return value
-            }
-            const cloudPlanLimit = await getMaxConcurrentJobsForPlatformPlan({ platformId, log })
-            return Math.min(value, cloudPlanLimit)
-        }
-    }
+async function getMaxConcurrentJobs({ platformId, projectId, log }: { platformId: PlatformId, projectId: string, log: FastifyBaseLogger }): Promise<number> {
     const planLimit = await getMaxConcurrentJobsForPlatformPlan({ platformId, log })
     // When worker groups are enabled, an unassigned-limit project is capped by the physical capacity
     // of the pool its runs route to (the group pool if the project has one, else shared).
@@ -111,21 +98,19 @@ function decodeParkedMember(member: string): { queueName: string, jobId: string,
     return { queueName, jobId, priority }
 }
 
-async function resolveEffectivePoolId({ jobData, flowGroupId, log }: { jobData: ExecuteFlowJobData, flowGroupId: string | null, log: FastifyBaseLogger }): Promise<{ effectivePoolId: string, poolId: string | null }> {
+function resolveEffectivePoolId({ jobData, flowGroupId }: { jobData: ExecuteFlowJobData, flowGroupId: string | null }): string {
     if (!isNil(flowGroupId)) {
-        return { effectivePoolId: `flow-group:${flowGroupId}`, poolId: null }
+        return `flow-group:${flowGroupId}`
     }
-    const { data: poolId } = await tryCatch(() => concurrencyPoolService(log).getProjectPoolId(jobData.projectId))
-    return { effectivePoolId: poolId ?? jobData.projectId, poolId }
+    return jobData.projectId
 }
 
 async function tryAcquireSlot({ jobId, jobData, job, flowGroupId, log }: { jobId: string, jobData: ExecuteFlowJobData, job: Job, flowGroupId: string | null, log: FastifyBaseLogger }): Promise<boolean> {
     const flowTimeoutInMilliseconds = apDayjsDuration(system.getNumberOrThrow(AppSystemProp.FLOW_TIMEOUT_SECONDS), 'seconds').add(1, 'minute').asMilliseconds()
-    const { effectivePoolId, poolId } = await resolveEffectivePoolId({ jobData, flowGroupId, log })
+    const effectivePoolId = resolveEffectivePoolId({ jobData, flowGroupId })
     const maxConcurrentJobs = !isNil(flowGroupId)
         ? await getMaxConcurrentJobsForPlatformPlan({ platformId: jobData.platformId, log })
         : await getMaxConcurrentJobs({
-            poolId,
             platformId: jobData.platformId,
             projectId: jobData.projectId,
             log,
@@ -186,8 +171,8 @@ return 0
     return result === 0
 }
 
-async function releaseSlot({ jobId, jobData, flowGroupId, log }: { jobId: string, jobData: ExecuteFlowJobData, flowGroupId: string | null, log: FastifyBaseLogger }): Promise<string> {
-    const { effectivePoolId } = await resolveEffectivePoolId({ jobData, flowGroupId, log })
+async function releaseSlot({ jobId, jobData, flowGroupId }: { jobId: string, jobData: ExecuteFlowJobData, flowGroupId: string | null }): Promise<string> {
+    const effectivePoolId = resolveEffectivePoolId({ jobData, flowGroupId })
     const setKey = getConcurrencyPoolSetKey(effectivePoolId)
     const member = `${jobData.projectId}:${jobId}`
     const redisConnection = await redisConnections.useExisting()
@@ -262,7 +247,7 @@ export const rateLimiterInterceptor: JobInterceptor = {
             return
         }
         const flowGroupId = await resolveFlowGroupId(jobData, log)
-        const effectivePoolId = await releaseSlot({ jobId, jobData, flowGroupId, log })
+        const effectivePoolId = await releaseSlot({ jobId, jobData, flowGroupId })
         log.debug({ job: { id: jobId }, project: { id: jobData.projectId } }, '[rateLimiterInterceptor] Slot released')
         const { error } = await tryCatch(() => promoteNextParkedJob({ effectivePoolId, log }))
         if (error) {

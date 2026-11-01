@@ -1,7 +1,6 @@
 import { ActivepiecesError, apId, ErrorCode, isNil, tryCatch } from '@activepieces/core-utils'
 import { McpToolDefinition, McpToolResult, PopulatedMcpServer } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
-import { platformPlanService } from '../ee/platform/platform-plan/platform-plan.service'
 import { rejectedPromiseHandler } from '../helper/promise-handler'
 import { trackBillingAndSendTelemetry } from '../platform/billing-and-telemetry'
 import { assertCreditsNotExceeded, CreditUsageSource, McpCallCreditConsumptionProperties } from '../platform/billing-provider'
@@ -80,7 +79,6 @@ async function refusalWhenOutOfCredits({ platformId, toolName, log }: RefusalPar
 
 async function chargeCall({ platformId, projectId, toolName, clientId, log }: ChargeCallParams): Promise<void> {
     const { error } = await tryCatch(async () => {
-        const platformPlan = await platformPlanService(log).getOrCreateForPlatform(platformId)
         const properties: McpCallCreditConsumptionProperties = { platformId, projectId, toolName, clientId }
         const usage = {
             platformId,
@@ -91,7 +89,7 @@ async function chargeCall({ platformId, projectId, toolName, clientId, log }: Ch
         }
         await trackBillingAndSendTelemetry({
             log,
-            licenseKey: platformPlan.licenseKey,
+            licenseKey: null,
             credits: usage,
         })
     })

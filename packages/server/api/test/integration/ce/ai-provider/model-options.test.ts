@@ -180,22 +180,6 @@ describe('GET /v1/ai-providers/model-options', () => {
         expect((await listOptions({ surface: 'flow' })).defaultChoice).toEqual({ type: 'tier', tierId: second.id })
     })
 
-    it('shows credits when the managed provider is visible and prefers them over the first option', async () => {
-        process.env.AP_OPENROUTER_PROVISION_KEY = 'test-provision-key'
-        try {
-            const managed = await mockAndSaveAIProvider({ platformId: ctx.platform.id, provider: AIProviderName.ACTIVEPIECES, displayName: 'Activepieces' })
-            await seedKey({ name: 'Key', models: ['first'] })
-
-            const options = await listOptions({ surface: 'chat' })
-
-            expect(options.credits?.providerConfigId).toBe(managed.id)
-            expect(options.credits?.tiers.length).toBeGreaterThan(0)
-            expect(options.defaultChoice).toEqual({ type: 'model', provider: AIProviderName.ACTIVEPIECES, providerConfigId: managed.id, modelId: options.credits?.defaultTierId })
-        }
-        finally {
-            delete process.env.AP_OPENROUTER_PROVISION_KEY
-        }
-    })
 })
 
 async function listOptions({ surface, tierId }: { surface: 'flow' | 'agent' | 'chat', tierId?: string }): Promise<ModelOptions> {

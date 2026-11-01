@@ -1,8 +1,7 @@
 import { ActivepiecesAiConsumerSource, AiCallTokens, AiChargeBasis, isNil, spreadIfDefined, tryCatch } from '@activepieces/core-utils'
-import { ConsumableFeatureId, isAppSumoCreditedPlan, ReportAiUsageRequest } from '@activepieces/shared'
+import { ConsumableFeatureId, ReportAiUsageRequest } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { distributedStore } from '../database/redis-connections'
-import { platformPlanService } from '../ee/platform/platform-plan/platform-plan.service'
 import { trackBillingAndSendTelemetry } from '../platform/billing-and-telemetry'
 import { AiCreditConsumptionProperties, billingProvider, ChatAppSumoConsumptionProperties, ChatCreditConsumptionProperties, CreditUsageSource } from '../platform/billing-provider'
 import { chargeFor, CostBasis, costBasisOf } from './ai-credits'
@@ -21,24 +20,20 @@ export const aiUsageService = (log: FastifyBaseLogger) => ({
         const credits = chargeFor({ usage: input.usage, toolCalls })
         const costBasis = costBasisOf(input.usage)
         const platformId = input.billing.platformId
-        const platformPlan = await platformPlanService(log).getOrCreateForPlatform(platformId)
-        const appSumo = isAppSumoCreditedPlan(platformPlan.plan)
         const chat = chatEventOf({ input, toolCalls, costBasis, usage })
         if (!isNil(chat)) {
             await trackBillingAndSendTelemetry({
                 log,
-                licenseKey: platformPlan.licenseKey,
+                licenseKey: null,
                 credits: { platformId, value: credits, source: CreditUsageSource.CHAT, idempotencyKey: input.idempotencyKey, properties: chat.credits },
-                appSumo: appSumo ? { platformId, value: credits, source: CreditUsageSource.CHAT, idempotencyKey: `${input.idempotencyKey}:appSumo`, properties: chat.appSumo } : undefined,
             })
         }
         else {
             const properties = billingProperties({ input, toolCalls, costBasis, usage })
             await trackBillingAndSendTelemetry({
                 log,
-                licenseKey: platformPlan.licenseKey,
+                licenseKey: null,
                 credits: { platformId, value: credits, source: CreditUsageSource.AI, idempotencyKey: input.idempotencyKey, properties },
-                appSumo: appSumo ? { platformId, value: credits, source: CreditUsageSource.AI, idempotencyKey: `${input.idempotencyKey}:appSumo`, properties } : undefined,
             })
         }
         await addConversationCredits({ input, credits, log })

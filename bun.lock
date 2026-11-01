@@ -204,16 +204,6 @@
         "vitest": "3.2.6",
       },
     },
-    "packages/ee/embed-sdk": {
-      "name": "ee-embed-sdk",
-      "version": "0.16.0",
-      "dependencies": {
-        "tslib": "2.6.2",
-      },
-      "devDependencies": {
-        "@types/node": "24.11.0",
-      },
-    },
     "packages/pieces/common": {
       "name": "@activepieces/pieces-common",
       "version": "0.15.1",
@@ -11373,7 +11363,6 @@
         "date-fns": "4.1.0",
         "dayjs": "1.11.9",
         "deep-equal": "2.2.2",
-        "ee-embed-sdk": "workspace:*",
         "embla-carousel-react": "8.6.0",
         "fast-average-color": "9.5.0",
         "fuse.js": "7.0.0",
@@ -15850,8 +15839,6 @@
     "ecdsa-sig-formatter": ["ecdsa-sig-formatter@1.0.11", "", { "dependencies": { "safe-buffer": "^5.0.1" } }, "sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ=="],
 
     "ed2curve": ["ed2curve@0.3.0", "", { "dependencies": { "tweetnacl": "1.x.x" } }, "sha512-8w2fmmq3hv9rCrcI7g9hms2pMunQr1JINfcjwR9tAyZqhtyaMN991lF/ZfHfr5tzZQ8c7y7aBgZbjfbd0fjFwQ=="],
-
-    "ee-embed-sdk": ["ee-embed-sdk@workspace:packages/ee/embed-sdk"],
 
     "ee-first": ["ee-first@1.1.1", "", {}, "sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow=="],
 

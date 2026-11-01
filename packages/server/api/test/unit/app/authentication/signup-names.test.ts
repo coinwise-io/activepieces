@@ -46,10 +46,10 @@ describe('signupNames', () => {
 
     describe('platformNameFromPerson', () => {
         it.each([
-            ['Ahmad', "Ahmad's Platform"],
-            ['Ahmad Bin', "Ahmad's Platform"],
-            ['Chris', "Chris's Platform"],
-            ["Ahmad's", "Ahmad's Platform"],
+            ['Ahmad', 'Ahmad\'s Platform'],
+            ['Ahmad Bin', 'Ahmad\'s Platform'],
+            ['Chris', 'Chris\'s Platform'],
+            ['Ahmad\'s', 'Ahmad\'s Platform'],
         ])('names the platform from %s -> %s', (firstName, expected) => {
             expect(
                 signupNames.platformNameFromPerson({ firstName, email: 'a.b@activepieces.com' }),
@@ -59,7 +59,7 @@ describe('signupNames', () => {
         it('falls back to the email local part when the person has no usable name', () => {
             expect(
                 signupNames.platformNameFromPerson({ firstName: '', email: 'ahmad.tash@activepieces.com' }),
-            ).toBe("Ahmad's Platform")
+            ).toBe('Ahmad\'s Platform')
         })
 
         it('uses the whole fallback when neither the name nor the address yields a word', () => {
@@ -93,7 +93,7 @@ describe('signupNames', () => {
         it.each([
             ['Ahmad'],
             ['Chris'],
-            ["Ahmad's"],
+            ['Ahmad\'s'],
             ['Ahmad Bin'],
             [''],
         ])('detects the name generated for %s', (firstName) => {
@@ -162,9 +162,9 @@ describe('signupNames', () => {
         })
 
         it.each([
-            ['Ahmad', 'ahmad@gmail.com', "Ahmad's Platform"],
-            ['Chris', 'chris@yahoo.com', "Chris's Platform"],
-            ['', 'ahmad.tash@gmail.com', "Ahmad's Platform"],
+            ['Ahmad', 'ahmad@gmail.com', 'Ahmad\'s Platform'],
+            ['Chris', 'chris@yahoo.com', 'Chris\'s Platform'],
+            ['', 'ahmad.tash@gmail.com', 'Ahmad\'s Platform'],
         ])('falls back to the person for %s at %s', (firstName, email, expected) => {
             expect(signupNames.platformNameFromSignup({ firstName, email })).toBe(expected)
         })
