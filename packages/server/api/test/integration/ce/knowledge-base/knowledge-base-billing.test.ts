@@ -49,25 +49,6 @@ function upload({ ctx }: { ctx: TestContext }) {
 }
 
 describe('embedding an upload on the managed provider', () => {
-    it('charges the owning platform and project what the provider reports', async () => {
-        const events: ActivepiecesAiCostEvent[] = []
-        activepiecesAiCost.setReporter((event) => {
-            events.push(event)
-        })
-        vi.spyOn(globalThis, 'fetch').mockImplementation(async () => embeddingResponse())
-        const ctx = await createTestContext(app)
-        await mockAndSaveAIProvider({ platformId: ctx.platform.id, provider: AIProviderName.ACTIVEPIECES, enabledForChat: true })
-
-        const response = await upload({ ctx })
-
-        expect(response.statusCode).toBe(StatusCodes.CREATED)
-        expect(events).toHaveLength(1)
-        expect(events[0].billing.platformId).toBe(ctx.platform.id)
-        expect(events[0].billing.projectId).toBe(ctx.project.id)
-        expect(events[0].call.charge).toBe(AiChargeBasis.PROVIDER_REPORTED_COST)
-        expect(events[0].call).toMatchObject({ costUsd: 0.00042 })
-    })
-
     it('records an own-key embedding for usage without charging it', async () => {
         const events: ActivepiecesAiCostEvent[] = []
         activepiecesAiCost.setReporter((event) => {

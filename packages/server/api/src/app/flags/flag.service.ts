@@ -6,8 +6,6 @@ import { FastifyBaseLogger } from 'fastify'
 import { In } from 'typeorm'
 import { turnstile } from '../authentication/lib/turnstile'
 import { repoFactory } from '../core/db/repo-factory'
-import { federatedAuthnService } from '../ee/authentication/federated-authn/federated-authn-service'
-import { smtpEmailSender } from '../ee/helper/email/email-sender/smtp-email-sender'
 import { domainHelper } from '../helper/domain-helper'
 import { auditLogRetentionCeiling } from '../helper/retention/audit-log-retention-ceiling'
 import { system } from '../helper/system/system'
@@ -20,7 +18,7 @@ import { webhookSecretsUtils } from './webhook-secrets-util'
 
 const flagRepo = repoFactory(FlagEntity)
 
-export const flagService = (log: FastifyBaseLogger) => ({
+export const flagService = (_log: FastifyBaseLogger) => ({
     save: async (flag: FlagType): Promise<Flag> => {
         return flagRepo().save({
             id: flag.id,
@@ -155,7 +153,7 @@ export const flagService = (log: FastifyBaseLogger) => ({
             },
             {
                 id: ApFlagId.THIRD_PARTY_AUTH_PROVIDER_REDIRECT_URL,
-                value: await federatedAuthnService(log).getThirdPartyRedirectUrl(),
+                value: await domainHelper.getInternalUrl({ path: '/redirect' }),
                 created,
                 updated,
             },
@@ -301,7 +299,7 @@ export const flagService = (log: FastifyBaseLogger) => ({
             },
             {
                 id: ApFlagId.SMTP_CONFIGURED,
-                value: smtpEmailSender(log).isSmtpConfigured(),
+                value: false,
                 created,
                 updated,
             },
@@ -341,7 +339,7 @@ export const flagService = (log: FastifyBaseLogger) => ({
     },
 
     aiCreditsEnabled(): boolean {
-        return !isNil(system.get(AppSystemProp.OPENROUTER_PROVISION_KEY))
+        return false
     },
 })
 

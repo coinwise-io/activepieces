@@ -18,7 +18,7 @@ describe('flowValidation.validateFlow — formulas', () => {
     })
 
     it('accepts a JavaScript helper the engine runs inside {{ }}', () => {
-        const result = flowValidation.validateFlow({ trigger: flowWithInput({ text: "{{ flattenNestedKeys(trigger['output'], ['users', 'name']) }}" }) })
+        const result = flowValidation.validateFlow({ trigger: flowWithInput({ text: '{{ flattenNestedKeys(trigger[\'output\'], [\'users\', \'name\']) }}' }) })
 
         expect(result.issues).toEqual([])
     })

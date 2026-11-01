@@ -78,17 +78,6 @@
         "!src/**/*.test.ts"
       ]
     },
-    "ee-embed-sdk#bundle": {
-      "dependsOn": [],
-      "inputs": [
-        "src/**",
-        "tsconfig*.json",
-        "package.json",
-        "webpack.config.js"
-      ],
-      "outputs": ["../../../dist/packages/ee/embed-sdk/**"],
-      "cache": false
-    },
     "bundle": {
       "dependsOn": ["build", "@activepieces/cli#build"],
       "inputs": ["src/**", "package.json"],
@@ -121,14 +110,6 @@
       "cache": false
     },
     "test-ce": {
-      "dependsOn": ["build"],
-      "cache": false
-    },
-    "test-ee": {
-      "dependsOn": ["build"],
-      "cache": false
-    },
-    "test-cloud": {
       "dependsOn": ["build"],
       "cache": false
     },

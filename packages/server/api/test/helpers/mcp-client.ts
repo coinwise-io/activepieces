@@ -1,9 +1,8 @@
 import { spreadIfDefined } from '@activepieces/core-utils'
 import { FastifyInstance, InjectOptions } from 'fastify'
-import { CONVERSATION_ID_HEADER } from '../../src/app/ee/agent/mcp/agent-mcp'
 import { MCP_OAUTH_REDIRECT_URI, mcpOAuthTestHelpers } from './mcp-oauth'
 
-async function connect({ app, approve, projectId, conversationId }: ConnectParams): Promise<McpClient> {
+async function connect({ app, approve, projectId }: ConnectParams): Promise<McpClient> {
     const client = await mcpOAuthTestHelpers.registerClient({ app, tokenEndpointAuthMethod: 'none' })
     const { verifier, challenge } = mcpOAuthTestHelpers.generatePkce()
 
@@ -42,7 +41,6 @@ async function connect({ app, approve, projectId, conversationId }: ConnectParam
     return {
         accessToken: token.json().access_token,
         endpoint: projectId ? '/mcp' : '/mcp/platform',
-        ...spreadIfDefined('conversationId', conversationId),
     }
 }
 
@@ -72,7 +70,6 @@ async function rpc({ app, mcpClient, body }: RpcParams): Promise<JsonRpcResponse
             'authorization': `Bearer ${mcpClient.accessToken}`,
             'content-type': 'application/json',
             'accept': 'application/json, text/event-stream',
-            ...(mcpClient.conversationId ? { [CONVERSATION_ID_HEADER]: mcpClient.conversationId } : {}),
         },
         payload: { jsonrpc: '2.0', id: 1, ...body },
     }
@@ -93,7 +90,6 @@ export const PROJECT_RESOURCE = 'https://cloud.activepieces.com/mcp'
 export type McpClient = {
     accessToken: string
     endpoint: string
-    conversationId?: string
 }
 
 type ApproveRequest = (payload: { authRequestId: string, projectId?: string }) => ReturnType<FastifyInstance['inject']>
@@ -102,7 +98,6 @@ type ConnectParams = {
     app: FastifyInstance
     approve: ApproveRequest
     projectId?: string
-    conversationId?: string
 }
 
 type CallToolParams = {

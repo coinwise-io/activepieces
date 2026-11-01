@@ -9,7 +9,6 @@ const workflowPath = join(repoRoot, '.github/workflows/agent-evals.yml')
 const GATED_FILTERS = [
     'packages/server/worker/src/lib/execute/jobs/ee/agent/**',
     'packages/server/worker/test/lib/agent-eval/**',
-    'packages/server/api/src/app/ee/agent/**',
     'packages/server/api/src/assets/prompts/**',
     'packages/core/shared/src/lib/ee/agent/**',
     'packages/server/utils/src/agent-ai-utils.ts',

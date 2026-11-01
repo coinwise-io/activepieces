@@ -8,10 +8,18 @@ describe('jobFailureLogger.signatureOf', () => {
         }
         let sigA = ''
         let sigB = ''
-        try { throwAtFixedLine() }
-        catch (e) { sigA = jobFailureLogger.signatureOf(e) }
-        try { throwAtFixedLine() }
-        catch (e) { sigB = jobFailureLogger.signatureOf(e) }
+        try {
+            throwAtFixedLine() 
+        }
+        catch (e) {
+            sigA = jobFailureLogger.signatureOf(e) 
+        }
+        try {
+            throwAtFixedLine() 
+        }
+        catch (e) {
+            sigB = jobFailureLogger.signatureOf(e) 
+        }
         expect(sigA).toBe(sigB)
         expect(sigA).toMatch(/^Error@job-failure-logger\.test\.ts:\d+$/)
     })
@@ -23,7 +31,9 @@ describe('jobFailureLogger.signatureOf', () => {
                 this.name = 'BoomError'
             }
         }
-        try { throw new BoomError() }
+        try {
+            throw new BoomError() 
+        }
         catch (e) {
             expect(jobFailureLogger.signatureOf(e)).toMatch(/^BoomError@/)
         }

@@ -35,7 +35,6 @@ import { worker } from '../../../../../../worker/src/lib/worker'
 import { databaseConnection } from '../../../../../src/app/database/database-connection'
 import { flowRunService } from '../../../../../src/app/flows/flow-run/flow-run-service'
 import { db } from '../../../../helpers/db'
-import { createTestContext } from '../../../../helpers/test-context'
 import { setupE2eEnvironment } from '../../../../helpers/e2e-setup'
 import {
     createMockFlow,
@@ -43,6 +42,7 @@ import {
     createMockPieceMetadata,
     mockAndSaveBasicSetup,
 } from '../../../../helpers/mocks'
+import { createTestContext } from '../../../../helpers/test-context'
 
 const CUSTOM_PIECE_NAME = 'e2e-custom-echo'
 const CUSTOM_PIECE_VERSION = '0.0.1'

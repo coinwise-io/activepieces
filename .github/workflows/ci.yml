@@ -153,10 +153,8 @@ jobs:
         include:
           - name: ce
             tasks: test-ce
-          - name: cloud
-            tasks: test-cloud
-          - name: ee, unit, migrations
-            tasks: test-ee test-unit check-migrations
+          - name: unit, migrations
+            tasks: test-unit check-migrations
     services:
       redis:
         image: redis:7-alpine

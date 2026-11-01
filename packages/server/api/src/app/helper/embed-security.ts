@@ -1,8 +1,6 @@
 import { isNil } from '@activepieces/core-utils'
-import { ApEdition } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { lru, LRU } from 'tiny-lru'
-import { embedSubdomainService } from '../ee/embed-subdomain/embed-subdomain.service'
 import { platformService } from '../platform/platform.service'
 import { system } from './system/system'
 import { AppSystemProp } from './system/system-props'
@@ -21,8 +19,7 @@ function buildFrameAncestorsHeader({ origins }: { origins: string[] }): string {
 }
 
 async function resolveAllowedOrigins({ hostname, log }: { hostname: string, log: FastifyBaseLogger }): Promise<string[]> {
-    const edition = system.getEdition()
-    const cacheKey = edition === ApEdition.CLOUD ? hostname : SELF_HOSTED_CACHE_KEY
+    const cacheKey = SELF_HOSTED_CACHE_KEY
 
     const hit = cache.get(cacheKey)
     if (!isNil(hit)) {
@@ -31,18 +28,6 @@ async function resolveAllowedOrigins({ hostname, log }: { hostname: string, log:
     const envOrigins = system.getList(AppSystemProp.ALLOWED_EMBED_ORIGINS).filter(isValidOrigin)
 
     try {
-        if (edition === ApEdition.CLOUD) {
-            const record = await embedSubdomainService(log).getByHostname({ hostname })
-            if (isNil(record)) {
-                cache.set(cacheKey, envOrigins)
-                return envOrigins
-            }
-            const platform = await platformService(log).getOneOrThrow(record.platformId)
-            const origins = mergeUnique(platform.allowedEmbedOrigins ?? [], envOrigins)
-            cache.set(cacheKey, origins)
-            return origins
-        }
-
         const platform = await platformService(log).getOldestPlatform()
         if (isNil(platform)) {
             cache.set(cacheKey, envOrigins)

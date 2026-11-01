@@ -194,7 +194,7 @@ describe('machineService.list — platform filtering', () => {
             workerGroupId: '1cpu_machine',
         })
 
-        const result = await machineService(mockLogger).list('any-platform');
+        const result = await machineService(mockLogger).list('any-platform')
         expect(result).toHaveLength(1)
         expect(result[0].id).toBe('project-worker')
         expect(result[0].workerGroupScope).toBe(WorkerGroupScope.PROJECT)

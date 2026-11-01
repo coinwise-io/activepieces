@@ -1,10 +1,9 @@
 import { Readable } from 'node:stream'
 import { ActivepiecesError, apId, ErrorCode, isNil, SeekPage, spreadIfDefined } from '@activepieces/core-utils'
-import { CreateTableRequest, CreateTableWebhookRequest, ExportTableResponse, Field, FileCompression, FileType, PopulatedTable, SharedTemplate, Table, TableDataState, TableImportDataType, TableTemplate, TableWebhook, TableWebhookEventType, TemplateStatus, TemplateType, UncategorizedFolderId, UpdateTableRequest, UserWithMetaInformation } from '@activepieces/shared'
+import { CreateTableRequest, CreateTableWebhookRequest, ExportTableResponse, Field, FieldType, FileCompression, FileType, PopulatedTable, SharedTemplate, Table, TableDataState, TableImportDataType, TableState, TableTemplate, TableWebhook, TableWebhookEventType, TemplateStatus, TemplateType, UncategorizedFolderId, UpdateTableRequest, UserWithMetaInformation } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { ArrayContains, ILike, In, IsNull } from 'typeorm'
 import { repoFactory } from '../../core/db/repo-factory'
-import { projectStateService } from '../../ee/projects/project-release/project-state/project-state.service'
 import { fileService } from '../../file/file.service'
 import { enforceByteLimit, filesService } from '../../file/files-service'
 import { getFolderIdFromRequest } from '../../flows/flow/flow.service'
@@ -138,7 +137,6 @@ export const tableService = {
         tableId,
         userMetadata,
         projectId,
-        log,
     }: GetTemplateParams): Promise<SharedTemplate> {
         const table = await this.getOneOrThrow({
             id: tableId,
@@ -152,7 +150,7 @@ export const tableService = {
             fields,
         }
 
-        const tableState = projectStateService(log).getTableState(populatedTable)
+        const tableState = toTableState(populatedTable)
 
         const records = await recordRepo().find({
             where: { tableId: table.id, projectId },
@@ -367,6 +365,20 @@ export const tableService = {
 const EXPORT_BATCH_SIZE = 2000
 
 const CELL_EDGE_CHARS = /^[\s\u0000-\u001F\u007F-\u009F]+|[\s\u0000-\u001F\u007F-\u009F]+$/g
+
+function toTableState(table: PopulatedTable): TableState {
+    return TableState.parse({
+        id: table.id,
+        externalId: table.externalId ?? table.id,
+        name: table.name,
+        fields: table.fields.map((field) => ({
+            name: field.name,
+            type: field.type,
+            externalId: field.externalId,
+            data: field.type === FieldType.STATIC_DROPDOWN ? field.data : undefined,
+        })),
+    })
+}
 
 function assertSortIsNotCombinedWithCursor({ sortBy, cursor }: { sortBy: 'NAME' | undefined, cursor: string | undefined }): void {
     if (isNil(sortBy) || isNil(cursor)) {

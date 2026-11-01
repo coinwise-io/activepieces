@@ -114,10 +114,6 @@ export default defineConfig(({ command, mode }) => {
           __dirname,
           '../../packages/core/shared/src',
         ),
-        'ee-embed-sdk': path.resolve(
-          __dirname,
-          '../../packages/ee/embed-sdk/src',
-        ),
         '@activepieces/pieces-framework': path.resolve(
           __dirname,
           '../../packages/pieces/framework/src',

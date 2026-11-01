@@ -3,7 +3,7 @@ import { FlowRunStatus, FlowVersionState, RunEnvironment } from '@activepieces/s
 import { FastifyInstance } from 'fastify'
 import { markParentRunAsFailed } from '../../../../../src/app/flows/flow-run/flow-runs-queue'
 import { db } from '../../../../helpers/db'
-import { createMockFlow, createMockFlowVersion, createMockFlowRun, createMockWaitpoint, mockAndSaveBasicSetup } from '../../../../helpers/mocks'
+import { createMockFlow, createMockFlowRun, createMockFlowVersion, createMockWaitpoint, mockAndSaveBasicSetup } from '../../../../helpers/mocks'
 import { setupTestEnvironment, teardownTestEnvironment } from '../../../../helpers/test-setup'
 
 let app: FastifyInstance

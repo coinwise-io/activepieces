@@ -141,6 +141,7 @@ describe('MCP OAuth connected clients', () => {
         it('renders a null member when the user who signed in has been deleted', async () => {
             const member = await createMemberContext(app!, ctx, { projectRole: DefaultProjectRole.ADMIN })
             const orphaned = await grantAccess({ userId: member.user.id, projectId: ctx.project.id, redirectUris: [CLAUDE_REDIRECT] })
+            await db.delete('project', member.project.id)
             await db.delete('user', member.user.id)
 
             const { data } = (await ctx.get('/v1/mcp-oauth/grants')).json()

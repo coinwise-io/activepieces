@@ -1,4 +1,3 @@
-import { ActivepiecesClientEventName } from 'ee-embed-sdk';
 import { t } from 'i18next';
 import { ChevronLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -14,21 +13,6 @@ import { flagsHooks } from '@/hooks/flags-hooks';
 import { authenticationSession } from '@/lib/authentication-session';
 
 const HomeButtonWrapper = ({ children }: { children: React.ReactNode }) => {
-  const { embedState } = useEmbedding();
-  if (embedState.emitHomeButtonClickedEvent) {
-    const handleClick = () => {
-      window.parent.postMessage(
-        {
-          type: ActivepiecesClientEventName.CLIENT_BUILDER_HOME_BUTTON_CLICKED,
-          data: {
-            route: '/flows',
-          },
-        },
-        '*',
-      );
-    };
-    return <div onClick={handleClick}>{children}</div>;
-  }
   return (
     <Link to={authenticationSession.appendProjectRoutePrefix('/flows')}>
       {children}

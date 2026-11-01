@@ -107,7 +107,7 @@ async function installNewPieces(cloudPieces: PieceRegistryResponse[], dbPieces: 
                 fetchFailed++
                 return
             }
-            const pieceMetadata = await response.json()
+            const pieceMetadata = JSON.parse(await response.text())
             const { error } = await tryCatch(() => pieceMetadataService(log).create({
                 pieceMetadata,
                 packageType: pieceMetadata.packageType,
@@ -142,7 +142,7 @@ async function listCloudPieces(): Promise<PieceRegistryResponse[]> {
     if (!response.ok) {
         throw new Error(`Failed to fetch cloud pieces: ${response.status}`)
     }
-    const pieces: PieceRegistryResponse[] = await response.json()
+    const pieces: PieceRegistryResponse[] = JSON.parse(await response.text())
     const piecesByName = groupBy(pieces, p => p.name)
     const latest = []
     const others = []

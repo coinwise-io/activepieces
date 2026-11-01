@@ -1,7 +1,7 @@
+import { buildOpenAICompatibleHeaders } from '@activepieces/ai-providers'
 import { ActivepiecesError, AIProviderModelType, ErrorCode, OpenAICompatibleProviderConfig, tryCatch } from '@activepieces/shared'
 import { describe, expect, it } from 'vitest'
 import { openAICompatibleProvider } from '../../../../src/app/ai/providers/openai-compatible-gateway-provider'
-import { buildOpenAICompatibleHeaders } from '@activepieces/ai-providers'
 
 const log = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined } as never
 const auth = { apiKey: 'sk-test' }

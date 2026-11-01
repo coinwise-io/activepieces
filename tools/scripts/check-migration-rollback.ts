@@ -6,7 +6,6 @@ import { scanMigrations } from './breaking-change-scanners/migration-ddl'
 const MIGRATION_DIRS = [
     'packages/server/api/src/app/database/migration/postgres',
     'packages/server/api/src/app/database/migration/common',
-    'packages/server/api/src/app/ee/database/migrations/postgres',
 ]
 
 function getChangedMigrationFiles(): string[] {

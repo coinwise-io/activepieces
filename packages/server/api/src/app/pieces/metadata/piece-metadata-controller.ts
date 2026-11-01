@@ -1,17 +1,14 @@
-import { ActivepiecesError, ErrorCode, isEmpty, isNil, LocalesEnum } from '@activepieces/core-utils'
+import { ActivepiecesError, ErrorCode, isNil, LocalesEnum } from '@activepieces/core-utils'
 import { PieceMetadataModel, PieceMetadataModelSummary } from '@activepieces/pieces-framework'
-import { ALL_PRINCIPAL_TYPES, ApEdition, EngineResponse, EngineResponseStatus, FlowVersion, GetPieceRequestParams, GetPieceRequestQuery, GetPieceRequestWithScopeParams, ListPiecesRequestQuery, PieceAudienceFilter, PieceCategory, PieceOptionRequest, Principal, PrincipalType, RegistryPiecesRequestQuery, SampleDataFileType, WorkerJobType } from '@activepieces/shared'
+import { ALL_PRINCIPAL_TYPES, EngineResponse, EngineResponseStatus, FlowVersion, GetPieceRequestParams, GetPieceRequestQuery, GetPieceRequestWithScopeParams, ListPiecesRequestQuery, PieceAudienceFilter, PieceCategory, PieceOptionRequest, Principal, PrincipalType, RegistryPiecesRequestQuery, SampleDataFileType, WorkerJobType } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
-import { rbacService } from '../../ee/authentication/project-role/rbac-service'
-import { resolveVisibility } from '../../ee/pieces/filters/piece-filtering-utils'
 import { flowService } from '../../flows/flow/flow.service'
 import { sampleDataService } from '../../flows/step-run/sample-data.service'
-import { system } from '../../helper/system/system'
 import { userInteractionWatcher } from '../../workers/user-interaction-watcher'
 import { pieceSyncService } from '../piece-sync-service'
 import { getPiecePackageWithoutArchive, pieceMetadataService } from './piece-metadata-service'
@@ -46,7 +43,6 @@ const basePiecesController: FastifyPluginAsyncZod = async (app) => {
         }
         const platformId = getPlatformId(req.principal)
         const projectId = req.query.projectId
-        await assertProjectAccess({ principal: req.principal, projectId, log: req.log })
         const pieceMetadataSummary = await pieceMetadataService(req.log).list({
             includeHidden: query.includeHidden ?? false,
             projectId,
@@ -75,16 +71,13 @@ const basePiecesController: FastifyPluginAsyncZod = async (app) => {
             const decodeScope = decodeURIComponent(scope)
             const decodedName = decodeURIComponent(name)
             const platformId = getPlatformId(req.principal)
-            await assertProjectAccess({ principal: req.principal, projectId: req.query.projectId, log: req.log })
             const piece = await pieceMetadataService(req.log).getOrThrow({
                 platformId,
                 name: `${decodeScope}/${decodedName}`,
                 version,
                 locale: req.query.locale as LocalesEnum | undefined,
             })
-            const policy = await resolveVisibility({ platformId, projectId: req.query.projectId, log: req.log })
-            const visiblePiece = applyVisibilityPolicy({ policy, piece })
-            return filterModelActionsByAudience(visiblePiece, req.query.audience)
+            return filterModelActionsByAudience(piece, req.query.audience)
         },
     )
 
@@ -96,16 +89,13 @@ const basePiecesController: FastifyPluginAsyncZod = async (app) => {
             const { version } = req.query
             const decodedName = decodeURIComponent(name)
             const platformId = getPlatformId(req.principal)
-            await assertProjectAccess({ principal: req.principal, projectId: req.query.projectId, log: req.log })
             const piece = await pieceMetadataService(req.log).getOrThrow({
                 platformId,
                 name: decodedName,
                 version,
                 locale: req.query.locale as LocalesEnum | undefined,
             })
-            const policy = await resolveVisibility({ platformId, projectId: req.query.projectId, log: req.log })
-            const visiblePiece = applyVisibilityPolicy({ policy, piece })
-            return filterModelActionsByAudience(visiblePiece, req.query.audience)
+            return filterModelActionsByAudience(piece, req.query.audience)
         },
     )
 
@@ -181,20 +171,6 @@ async function getFlowVersionForOptions({ projectId, flowId, flowVersionId, log 
     return flow.version
 }
 
-async function assertProjectAccess({ principal, projectId, log }: AssertProjectAccessParams): Promise<void> {
-    if (![ApEdition.ENTERPRISE, ApEdition.CLOUD].includes(system.getEdition())) {
-        return
-    }
-    if (isNil(projectId) || isEmpty(projectId) || isNil(getPlatformId(principal))) {
-        return
-    }
-    await rbacService(log).assertPrinicpalAccessToProject({
-        principal,
-        permission: undefined,
-        projectId,
-    })
-}
-
 function getPlatformId(principal: Principal): string | undefined {
     return principal.type === PrincipalType.WORKER || principal.type === PrincipalType.UNKNOWN || principal.type === PrincipalType.ONBOARDING ? undefined : principal.platform?.id
 }
@@ -204,19 +180,6 @@ function filterModelActionsByAudience(piece: PieceMetadataModel, audience: Piece
         ...piece,
         actions: filterActionsByAudience(piece.actions, audience),
     }
-}
-
-function applyVisibilityPolicy({ policy, piece }: { policy: Awaited<ReturnType<typeof resolveVisibility>>, piece: PieceMetadataModel }): PieceMetadataModel {
-    if (isNil(policy)) {
-        return piece
-    }
-    if (!policy.isPieceVisible(piece.name)) {
-        throw new ActivepiecesError({
-            code: ErrorCode.ENTITY_NOT_FOUND,
-            params: { message: `piece_metadata_not_found pieceName=${piece.name}` },
-        })
-    }
-    return policy.filterPieceComponents(piece)
 }
 
 const RegistryPiecesRequest = {
@@ -303,8 +266,3 @@ type GetFlowVersionForOptionsParams = {
     log: FastifyBaseLogger
 }
 
-type AssertProjectAccessParams = {
-    principal: Principal
-    projectId: string | undefined
-    log: FastifyBaseLogger
-}

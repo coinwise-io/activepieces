@@ -1,6 +1,6 @@
+import { McpActivity, McpOAuthClientKey, PackageType, PieceType } from '@activepieces/shared'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { McpActivity, McpOAuthClientKey, PackageType, PieceType } from '@activepieces/shared'
 import { FastifyInstance } from 'fastify'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { databaseConnection } from '../../../../src/app/database/database-connection'
@@ -206,7 +206,7 @@ describe('MCP activity recording', () => {
     // validateAuth returns a plain error result; without isError it landed as SUCCEEDED
     // with no message, so a rejected call read as a working one in the feed.
     it('records a rejected auth argument as a failure', async () => {
-        await callRunAction({ connectionExternalId: "conn'external" })
+        await callRunAction({ connectionExternalId: 'conn\'external' })
 
         const rows = await findActivityRows()
         expect(rows).toHaveLength(1)

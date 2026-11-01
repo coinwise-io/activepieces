@@ -258,20 +258,15 @@ export async function applyProjectsAccessFilters<T extends ObjectLiteral>(
     queryBuilder: SelectQueryBuilder<T>,
     params: ApplyProjectsAccessFiltersParams,
 ): Promise<void> {
-    const { platformId, userId, isPrivileged } = params
+    const { userId, isPrivileged } = params
     if (isPrivileged) {
         return
     }
 
-    queryBuilder.andWhere(new Brackets(qb => {
-        qb.where(
-            'project."ownerId" = :userId AND project.type = :personalType',
-            { userId, personalType: ProjectType.PERSONAL },
-        ).orWhere(
-            'project.id IN (SELECT "projectId" FROM project_member WHERE "userId" = :userId AND "platformId" = :platformId)',
-            { userId, platformId },
-        )
-    }))
+    queryBuilder.andWhere(
+        'project."ownerId" = :userId AND project.type = :personalType',
+        { userId, personalType: ProjectType.PERSONAL },
+    )
 }
 async function assertExternalIdIsUnique(externalId: string | undefined | null, projectId: ProjectId): Promise<void> {
     if (!isNil(externalId)) {

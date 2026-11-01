@@ -1,4 +1,4 @@
-import { assertNotNullOrUndefined, isNil, spreadIfDefined } from '@activepieces/core-utils'
+import { ActivepiecesError, assertNotNullOrUndefined, ErrorCode, isNil, spreadIfDefined } from '@activepieces/core-utils'
 import { apVersionUtil, onCallService, UNKNOWN_VERSION } from '@activepieces/server-utils'
 import { ExecutionType, FileCompression, FileLocation, FileType, FlowOperationType, FlowStatus, WebsocketClientEvent, WorkerToApiContract } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
@@ -6,8 +6,6 @@ import { Socket } from 'socket.io'
 import { aiRpcHandlers } from '../../ai/ai-rpc-handlers'
 import { websocketService } from '../../core/websockets.service'
 import { distributedStore, redisConnections } from '../../database/redis-connections'
-import { agentRpcHandlers } from '../../ee/agent/agent-rpc-handlers'
-import { chatPersonalizationService } from '../../ee/agent/personalization/chat-personalization-service'
 import { eventDestinationRpcHandlers } from '../../event-destinations/event-destinations-rpc-handlers'
 import { fileService, getLocationForFile } from '../../file/file.service'
 import { s3Helper } from '../../file/s3-helper'
@@ -343,63 +341,61 @@ export function createHandlers(log: FastifyBaseLogger, assignment: WorkerGroupAs
             })
         },
 
-        async getAgentConfig(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).getAgentConfig(input)
+        async getAgentConfig() {
+            throw agentsUnavailableError()
         },
 
-        async saveAgentMessages(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).saveAgentMessages(input)
+        async saveAgentMessages() {
+            throw agentsUnavailableError()
         },
-        async beginAgentTask(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).beginAgentTask(input)
+        async beginAgentTask() {
+            throw agentsUnavailableError()
         },
-        async finishAgentTask(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).finishAgentTask(input)
-        },
-
-        async saveAgentFile(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).saveAgentFile(input)
+        async finishAgentTask() {
+            throw agentsUnavailableError()
         },
 
-        async readAgentFile(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).readAgentFile(input)
+        async saveAgentFile() {
+            throw agentsUnavailableError()
         },
 
-        async updateAgentProgress(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).updateAgentProgress(input)
+        async readAgentFile() {
+            throw agentsUnavailableError()
         },
 
-        async heartbeatAgentConversation(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).heartbeatAgentConversation(input)
-        },
-        async agentCreditsLeft(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).agentCreditsLeft(input)
+        async updateAgentProgress() {
+            throw agentsUnavailableError()
         },
 
-        async updateProjectContext(input) {
-            return agentRpcHandlers(agentRpcLog(log, input)).updateProjectContext(input)
+        async heartbeatAgentConversation() {
+            throw agentsUnavailableError()
+        },
+        async agentCreditsLeft() {
+            throw agentsUnavailableError()
         },
 
-        async executeAgentTool(input) {
-            const runId = typeof input.toolInput.runId === 'string' ? input.toolInput.runId : undefined
-            const conversationId = input.conversationId ?? (typeof input.toolInput.conversationId === 'string' ? input.toolInput.conversationId : undefined)
-            return agentRpcHandlers(agentRpcLog(log, { conversationId, runId, platformId: input.platformId, userId: input.userId })).executeAgentTool(input)
+        async updateProjectContext() {
+            throw agentsUnavailableError()
         },
 
-        async executePieceTool(input) {
-            return agentRpcHandlers(agentRpcLog(log, { conversationId: input.conversationId })).executePieceTool(input)
+        async executeAgentTool() {
+            throw agentsUnavailableError()
         },
 
-        async executeKnowledgeBaseTool(input) {
-            return agentRpcHandlers(agentRpcLog(log, { conversationId: input.conversationId })).executeKnowledgeBaseTool(input)
+        async executePieceTool() {
+            throw agentsUnavailableError()
         },
 
-        async executeFlowTool(input) {
-            return agentRpcHandlers(agentRpcLog(log, { conversationId: input.conversationId })).executeFlowTool(input)
+        async executeKnowledgeBaseTool() {
+            throw agentsUnavailableError()
         },
 
-        async updateFlowStepProgress(input) {
-            return agentRpcHandlers(agentRpcLog(log, { conversationId: input.conversationId })).updateFlowStepProgress(input)
+        async executeFlowTool() {
+            throw agentsUnavailableError()
+        },
+
+        async updateFlowStepProgress() {
+            throw agentsUnavailableError()
         },
 
         async resolveAiProvider(input) {
@@ -426,44 +422,42 @@ export function createHandlers(log: FastifyBaseLogger, assignment: WorkerGroupAs
         async resumeAiStep(input) {
             return aiRpcHandlers(log).resumeAiStep(input)
         },
-        async resumeFlowStep(input) {
-            return agentRpcHandlers(agentRpcLog(log, { conversationId: input.conversationId })).resumeFlowStep(input)
+        async resumeFlowStep() {
+            throw agentsUnavailableError()
         },
 
-        async sendAgentEmail(input) {
-            return agentRpcHandlers(agentRpcLog(log, { conversationId: input.conversationId, platformId: input.platformId, userId: input.userId })).sendAgentEmail(input)
+        async sendAgentEmail() {
+            throw agentsUnavailableError()
         },
 
-        async getPersonalizationConfig(input) {
-            return chatPersonalizationService(log).getConfigForWorker(input)
+        async getPersonalizationConfig() {
+            throw agentsUnavailableError()
         },
 
-        async getPersonalizationPrefillConfig(input) {
-            return chatPersonalizationService(log).getPrefillConfigForWorker(input)
+        async getPersonalizationPrefillConfig() {
+            throw agentsUnavailableError()
         },
 
-        async savePersonalizationResult(input) {
-            return chatPersonalizationService(log).saveResult(input)
+        async savePersonalizationResult() {
+            throw agentsUnavailableError()
         },
 
-        async savePersonalizationPrefill(input) {
-            return chatPersonalizationService(log).savePrefill(input)
+        async savePersonalizationPrefill() {
+            throw agentsUnavailableError()
         },
 
-        async sendPersonalizationProgress(input) {
-            return chatPersonalizationService(log).sendProgress(input)
+        async sendPersonalizationProgress() {
+            throw agentsUnavailableError()
         },
     }
 }
 
-// Binds conversation/run/platform/user to the per-call logger so every chat RPC
-// log line correlates with the worker turn and the analyze-logs timeline.
-function agentRpcLog(log: FastifyBaseLogger, ids: { conversationId?: string, runId?: string, platformId?: string, userId?: string }): FastifyBaseLogger {
-    return log.child({
-        ...spreadIfDefined('conversation', isNil(ids.conversationId) ? undefined : { id: ids.conversationId }),
-        ...spreadIfDefined('run', isNil(ids.runId) ? undefined : { id: ids.runId }),
-        ...spreadIfDefined('platform', isNil(ids.platformId) ? undefined : { id: ids.platformId }),
-        ...spreadIfDefined('user', isNil(ids.userId) ? undefined : { id: ids.userId }),
+function agentsUnavailableError(): ActivepiecesError {
+    return new ActivepiecesError({
+        code: ErrorCode.FEATURE_DISABLED,
+        params: {
+            message: 'Agents are not available in the community edition',
+        },
     })
 }
 

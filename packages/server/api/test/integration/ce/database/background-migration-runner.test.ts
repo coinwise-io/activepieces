@@ -34,7 +34,9 @@ describe('backgroundMigrationRunner', () => {
     it('records a failed migration with its error and does not mark it completed', async () => {
         const MigrationClass = makeTestMigration({
             name: `Failing${Date.now()}`,
-            up: async () => { throw new Error('boom') },
+            up: async () => {
+                throw new Error('boom') 
+            },
         })
         await expect(
             backgroundMigrationRunner.run({ log: app!.log, migrations: [MigrationClass] }),
@@ -52,7 +54,9 @@ describe('backgroundMigrationRunner', () => {
         const name = `RetrySucceeds${Date.now()}`
         const MigrationClass = makeTestMigration({
             name,
-            up: async () => { if (shouldFail) throw new Error('transient') },
+            up: async () => {
+                if (shouldFail) throw new Error('transient') 
+            },
         })
         await expect(
             backgroundMigrationRunner.run({ log: app!.log, migrations: [MigrationClass] }),
@@ -68,7 +72,9 @@ describe('backgroundMigrationRunner', () => {
         let upCalls = 0
         const MigrationClass = makeTestMigration({
             name: `Idempotent${Date.now()}`,
-            up: async () => { upCalls++ },
+            up: async () => {
+                upCalls++ 
+            },
         })
         await backgroundMigrationRunner.run({ log: app!.log, migrations: [MigrationClass] })
         await backgroundMigrationRunner.run({ log: app!.log, migrations: [MigrationClass] })
@@ -105,7 +111,9 @@ describe('backgroundMigrationRunner', () => {
     it('assertBackgroundMigrationComplete rejects a backfill that only failed', async () => {
         const backfill = makeTestMigration({
             name: `FailedGate${Date.now()}`,
-            up: async () => { throw new Error('kaboom') },
+            up: async () => {
+                throw new Error('kaboom') 
+            },
         })
         await expect(
             backgroundMigrationRunner.run({ log: app!.log, migrations: [backfill] }),
@@ -129,7 +137,9 @@ describe('backgroundMigrationRunner', () => {
         await migrationHelpers.withBackgroundMigrationLock({
             log: app!.log,
             migration: neverRanBackfill,
-            fn: async () => { fnRan = true },
+            fn: async () => {
+                fnRan = true 
+            },
         })
         expect(fnRan).toBe(true)
     })
@@ -186,7 +196,9 @@ describe('runMigrationsWithCatchup', () => {
     it('fails fast when the catchup backfill itself throws', async () => {
         const BrokenBackfill = makeTestMigration({
             name: `BrokenCatchup${Date.now()}`,
-            up: async () => { throw new Error('backfill bug') },
+            up: async () => {
+                throw new Error('backfill bug') 
+            },
         })
         const ds = databaseConnection()
         vi.spyOn(ds, 'runMigrations').mockRejectedValue(new BackgroundMigrationNotCompleteError(BrokenBackfill))
@@ -202,7 +214,9 @@ describe('withBackgroundMigrationLock', () => {
     it('serializes a concurrent runOne against the lock', async () => {
         let migrationStarted = false
         let releaseMigration: () => void = () => undefined
-        const migrationGate = new Promise<void>(resolve => { releaseMigration = resolve })
+        const migrationGate = new Promise<void>(resolve => {
+            releaseMigration = resolve 
+        })
         const SlowMigration = makeTestMigration({
             name: `SlowLockMigration${Date.now()}`,
             up: async () => {
@@ -218,7 +232,9 @@ describe('withBackgroundMigrationLock', () => {
             lockWaiter = migrationHelpers.withBackgroundMigrationLock({
                 log: app!.log,
                 migration: SlowMigration,
-                fn: async () => { gotLock = true },
+                fn: async () => {
+                    gotLock = true 
+                },
             })
             await new Promise(resolve => setTimeout(resolve, 100))
             expect(gotLock).toBe(false)
@@ -258,7 +274,9 @@ function makeTestMigration({
         name = migrationName
         release = '0.0.0-test'
         transaction = false as const
-        public async up(queryRunner: QueryRunner): Promise<void> { await upFn(queryRunner) }
+        public async up(queryRunner: QueryRunner): Promise<void> {
+            await upFn(queryRunner) 
+        }
         public async down(): Promise<void> { /* no-op */ }
     }
 }

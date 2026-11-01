@@ -27,16 +27,16 @@ describe('createIndexConcurrently (postgres)', () => {
 
     it('creates the index when it is missing', async () => {
         const queryRunner = mockQueryRunner([], [])
-        await migrationHelpers.createIndexConcurrently({ queryRunner, name: 'idx_foo', table: 'foo', columns: '"bar"', where: `"kind" = 'active'` })
+        await migrationHelpers.createIndexConcurrently({ queryRunner, name: 'idx_foo', table: 'foo', columns: '"bar"', where: '"kind" = \'active\'' })
         const secondCall = (queryRunner.query as ReturnType<typeof vi.fn>).mock.calls[1][0]
-        expect(secondCall).toBe(`CREATE INDEX CONCURRENTLY "idx_foo" ON "foo" ("bar") WHERE "kind" = 'active'`)
+        expect(secondCall).toBe('CREATE INDEX CONCURRENTLY "idx_foo" ON "foo" ("bar") WHERE "kind" = \'active\'')
     })
 
     it('supports UNIQUE indexes', async () => {
         const queryRunner = mockQueryRunner([], [])
         await migrationHelpers.createIndexConcurrently({ queryRunner, name: 'idx_foo_unique', table: 'foo', columns: '"bar"', unique: true })
         const secondCall = (queryRunner.query as ReturnType<typeof vi.fn>).mock.calls[1][0]
-        expect(secondCall).toBe(`CREATE UNIQUE INDEX CONCURRENTLY "idx_foo_unique" ON "foo" ("bar")`)
+        expect(secondCall).toBe('CREATE UNIQUE INDEX CONCURRENTLY "idx_foo_unique" ON "foo" ("bar")')
     })
 })
 
@@ -50,7 +50,7 @@ describe('createIndexConcurrently (pglite)', () => {
         const queryRunner = mockQueryRunner([])
         await migrationHelpers.createIndexConcurrently({ queryRunner, name: 'idx_foo', table: 'foo', columns: '"bar"' })
         expect(queryRunner.query).toHaveBeenCalledTimes(1)
-        expect(queryRunner.query).toHaveBeenCalledWith(`CREATE INDEX IF NOT EXISTS "idx_foo" ON "foo" ("bar")`)
+        expect(queryRunner.query).toHaveBeenCalledWith('CREATE INDEX IF NOT EXISTS "idx_foo" ON "foo" ("bar")')
     })
 })
 
@@ -61,14 +61,14 @@ describe('dropIndexConcurrently', () => {
         vi.spyOn(system, 'get').mockImplementation((prop) => prop === AppSystemProp.DB_TYPE ? DatabaseType.POSTGRES : undefined)
         const queryRunner = mockQueryRunner([])
         await migrationHelpers.dropIndexConcurrently({ queryRunner, name: 'idx_foo' })
-        expect(queryRunner.query).toHaveBeenCalledWith(`DROP INDEX CONCURRENTLY IF EXISTS "idx_foo"`)
+        expect(queryRunner.query).toHaveBeenCalledWith('DROP INDEX CONCURRENTLY IF EXISTS "idx_foo"')
     })
 
     it('omits CONCURRENTLY on pglite', async () => {
         vi.spyOn(system, 'get').mockImplementation((prop) => prop === AppSystemProp.DB_TYPE ? DatabaseType.PGLITE : undefined)
         const queryRunner = mockQueryRunner([])
         await migrationHelpers.dropIndexConcurrently({ queryRunner, name: 'idx_foo' })
-        expect(queryRunner.query).toHaveBeenCalledWith(`DROP INDEX  IF EXISTS "idx_foo"`)
+        expect(queryRunner.query).toHaveBeenCalledWith('DROP INDEX  IF EXISTS "idx_foo"')
     })
 })
 

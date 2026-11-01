@@ -187,6 +187,7 @@ describe('MCP OAuth OpenID Connect', () => {
     it('rejects userinfo once the user behind the token is gone', async () => {
         const gone = await createMemberContext(app, ctx, { projectRole: DefaultProjectRole.ADMIN })
         const tokens = await completeFlow({ scope: 'openid email', ctx: gone })
+        await databaseConnection().getRepository('project').delete({ id: gone.project.id })
         await databaseConnection().getRepository('user').delete({ id: gone.user.id })
 
         const res = await app.inject({

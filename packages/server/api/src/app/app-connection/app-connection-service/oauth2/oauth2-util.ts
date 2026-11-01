@@ -5,7 +5,6 @@ import { AppConnection, AppConnectionType, BaseOAuth2ConnectionValue, GetOAuth2A
 import { isAxiosError } from 'axios'
 import { FastifyBaseLogger } from 'fastify'
 import { nanoid } from 'nanoid'
-import { secretManagersService } from '../../../ee/secret-managers/secret-managers.service'
 import { pieceMetadataService } from '../../../pieces/metadata/piece-metadata-service'
 import { oauth2Discovery } from './oauth2-discovery'
 
@@ -102,7 +101,6 @@ export const oauth2Util = (log: FastifyBaseLogger) => ({
         pieceVersion,
         clientId,
         redirectUrl,
-        projectId,
         props,
         scopes,
     }: BuildAuthorizationUrlParams): Promise<GetOAuth2AuthorizationUrlResponse> => {
@@ -125,12 +123,7 @@ export const oauth2Util = (log: FastifyBaseLogger) => ({
         const discovered = await discoverOAuth2Client({ pieceAuth, props, redirectUrl })
         const resolvedProps = isNil(discovered) ? props : { ...props, ...discovered.props }
         const resolvedClientId = isNil(discovered)
-            ? await secretManagersService(log).resolveString({
-                key: clientId,
-                platformId,
-                throwOnFailure: true,
-                projectIds: projectId ? [projectId] : undefined,
-            })
+            ? clientId
             : discovered.client_id
         const selectedScopes = resolveSelectedScopes(scopes, pieceAuth.scope)
         const templateProps = backfillOptionalProps(resolvedProps, pieceAuth.props)

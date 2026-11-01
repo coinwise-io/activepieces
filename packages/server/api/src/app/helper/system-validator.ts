@@ -217,9 +217,8 @@ const systemPropValidators: {
     [AppSystemProp.FIREBASE_HASH_PARAMETERS]: stringValidator,
     [AppSystemProp.INTERNAL_URL]: stringValidator,
     [AppSystemProp.WORKERS]: numberValidator,
-    [AppSystemProp.EDITION]: enumValidator(Object.values(ApEdition)),
+    [AppSystemProp.EDITION]: enumValidator([ApEdition.COMMUNITY]),
     [AppSystemProp.FEATUREBASE_API_KEY]: stringValidator,
-    [AppSystemProp.OPENROUTER_PROVISION_KEY]: stringValidator,
     [AppSystemProp.OPENAI_API_KEY]: stringValidator,
     [AppSystemProp.SCIM_DEFAULT_PROJECT_ROLE]: enumValidator(Object.values(DefaultProjectRole)),
 

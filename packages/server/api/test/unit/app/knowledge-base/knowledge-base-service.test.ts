@@ -16,10 +16,16 @@ const updateBuilder = {
     update: () => updateBuilder,
     insert: () => updateBuilder,
     delete: () => updateBuilder,
-    values: (rows: unknown) => { mockInsert(rows); return updateBuilder },
+    values: (rows: unknown) => {
+        mockInsert(rows); return updateBuilder 
+    },
     orUpdate: () => updateBuilder,
-    set: (values: unknown) => { mockUpdate(values); return updateBuilder },
-    where: (_sql: string, params: unknown) => { mockUpdateWhere(params); return updateBuilder },
+    set: (values: unknown) => {
+        mockUpdate(values); return updateBuilder 
+    },
+    where: (_sql: string, params: unknown) => {
+        mockUpdateWhere(params); return updateBuilder 
+    },
     andWhere: () => updateBuilder,
     returning: () => updateBuilder,
     execute: mockUpdateExecute,

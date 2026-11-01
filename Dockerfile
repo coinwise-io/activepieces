@@ -106,12 +106,12 @@ RUN node -e "\
 " > packages/server/api/dist/src/migration-manifest.json
 
 # Remove workspaces not needed at runtime: pieces except the 5 the api imports,
-# plus web/cli/tests-e2e/embed-sdk whose deps (react & friends) would otherwise land
+# plus web/cli/tests-e2e whose deps (react & friends) would otherwise land
 # in the runtime node_modules. dist/packages/web is already built and kept.
 # Then drop the removed entries from the root workspaces list, drop the engine's test-only
 # core-piece devDependencies (their workspaces are gone), and regenerate bun.lock.
 RUN rm -rf packages/pieces/core packages/pieces/custom \
-      packages/web packages/cli packages/tests-e2e packages/ee && \
+      packages/web packages/cli packages/tests-e2e && \
     find packages/pieces/community -mindepth 1 -maxdepth 1 -type d \
       ! -name slack \
       ! -name square \

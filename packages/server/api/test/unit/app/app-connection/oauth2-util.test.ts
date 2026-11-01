@@ -9,10 +9,6 @@ vi.mock('../../../../src/app/pieces/metadata/piece-metadata-service', () => ({
 }))
 
 const mockResolveString = vi.fn()
-vi.mock('../../../../src/app/ee/secret-managers/secret-managers.service', () => ({
-    secretManagersService: () => ({ resolveString: mockResolveString }),
-}))
-
 import { oauth2Util } from '../../../../src/app/app-connection/app-connection-service/oauth2/oauth2-util'
 
 const util = oauth2Util({} as never)

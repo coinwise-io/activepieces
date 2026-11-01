@@ -3,7 +3,7 @@ import { CreateTemplateRequestBody, FlowVersionTemplate, ListTemplatesRequestQue
 import { FastifyBaseLogger } from 'fastify'
 import { ArrayContains, ArrayOverlap, Equal, IsNull } from 'typeorm'
 import { repoFactory } from '../core/db/repo-factory'
-import { platformTemplateService } from '../ee/template/platform-template.service'
+import { featureDisabledError } from '../core/security/authorization/platform-authorization'
 import { paginationHelper } from '../helper/pagination/pagination-utils'
 import { templateValidator } from './template-validator'
 import { TemplateEntity } from './template.entity'
@@ -62,7 +62,7 @@ export const templateService = (log: FastifyBaseLogger) => ({
                 return templateRepo().save(newTemplate)
             }
             case TemplateType.CUSTOM: {
-                return platformTemplateService().create({ platformId, name, summary, description, pieces, tags: newTags, blogUrl, metadata, author, categories, flows })
+                throw featureDisabledError()
             }
         }
     },
@@ -104,7 +104,7 @@ export const templateService = (log: FastifyBaseLogger) => ({
                 return templateRepo().findOneByOrFail({ id })
             }
             case TemplateType.CUSTOM: {
-                return platformTemplateService().update({ id, params, flows: sanatizedFlows, pieces })
+                throw featureDisabledError()
             }
         }
     },

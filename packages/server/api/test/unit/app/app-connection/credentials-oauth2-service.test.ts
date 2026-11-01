@@ -11,10 +11,6 @@ vi.mock('@activepieces/server-utils', () => ({
 }))
 
 const mockResolveString = vi.fn()
-vi.mock('../../../../src/app/ee/secret-managers/secret-managers.service', () => ({
-    secretManagersService: () => ({ resolveString: mockResolveString }),
-}))
-
 // oauth2-util.ts imports pieceMetadataService, whose module chain touches DB config at
 // import time; credentialsOauth2Service never calls it, but the import graph still does.
 vi.mock('../../../../src/app/pieces/metadata/piece-metadata-service', () => ({

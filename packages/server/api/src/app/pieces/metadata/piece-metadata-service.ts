@@ -8,7 +8,6 @@ import semVer from 'semver'
 import { EntityManager, FindOptionsSelect, In, IsNull } from 'typeorm'
 import { repoFactory } from '../../core/db/repo-factory'
 import { transaction } from '../../core/db/transaction'
-import { resolveVisibility } from '../../ee/pieces/filters/piece-filtering-utils'
 import { flowVersionRepo } from '../../flows/flow-version/flow-version.service'
 import { projectService } from '../../project/project-service'
 import { pieceCache, PieceRegistryEntry } from './piece-cache'
@@ -30,7 +29,6 @@ export const pieceMetadataService = (log: FastifyBaseLogger) => {
                 locale,
                 log,
             }))
-            const policy = await resolveVisibility({ platformId: params.platformId, projectId: params.projectId, log })
             const audience = params.audience ?? PieceAudienceFilter.HUMAN
             const audiencePieces = translatedPieces.map((piece) => ({ ...piece, actions: filterActionsByAudience(piece.actions, audience) }))
             const sortedPieces = await pieceListUtils(log).sortAndSearchPieces({
@@ -40,10 +38,7 @@ export const pieceMetadataService = (log: FastifyBaseLogger) => {
                 suggestionType: params.suggestionType,
             })
             const visiblePieces = params.includeHidden ? sortedPieces : sortedPieces.filter((piece) => !piece.deprecated)
-            const filteredPieces = params.includeHidden || isNil(policy) ? visiblePieces : policy.filterPieces(visiblePieces)
-
-            const summaries = toPieceMetadataModelSummary({ pieces: filteredPieces, originalPieces: audiencePieces, suggestionType: params.suggestionType })
-            return params.includeHidden || isNil(policy) ? summaries : policy.filterComponents(summaries)
+            return toPieceMetadataModelSummary({ pieces: visiblePieces, originalPieces: audiencePieces, suggestionType: params.suggestionType })
         },
         async registry(params: RegistryParams): Promise<PiecePackageInformation[]> {
             const registry = filterRegistry(await loadRegistry(log), {
@@ -55,7 +50,7 @@ export const pieceMetadataService = (log: FastifyBaseLogger) => {
                 version: piece.version,
             }))
         },
-        async get({ projectId, platformId, version, name, locale }: GetOrThrowParams): Promise<PieceMetadataModel | undefined> {
+        async get({ platformId, version, name, locale }: GetOrThrowParams): Promise<PieceMetadataModel | undefined> {
             const bestMatch = await findExactVersion(log, { name, version, platformId })
             if (isNil(bestMatch)) {
                 return undefined
@@ -71,15 +66,7 @@ export const pieceMetadataService = (log: FastifyBaseLogger) => {
                 return undefined
             }
             const [translatedPiece] = await translatePieces({ pieces: [piece], locale: locale ?? LocalesEnum.ENGLISH })
-
-            const policy = await resolveVisibility({ platformId, projectId, log })
-            if (isNil(policy)) {
-                return translatedPiece
-            }
-            if (!policy.isPieceVisible(translatedPiece.name)) {
-                return undefined
-            }
-            return policy.filterPieceComponents(translatedPiece)
+            return translatedPiece
         },
         async checkActionsExist({ actions, platformId }: CheckActionsExistParams): Promise<ActionExistence> {
             const latestVersions = await Promise.all(Object.keys(actions).map((name) => findExactVersion(log, { name, version: undefined, platformId })))

@@ -8,32 +8,32 @@ import { flowService } from '../../../../src/app/flows/flow/flow.service'
 import { flowFolderService } from '../../../../src/app/flows/folder/folder.service'
 import { system } from '../../../../src/app/helper/system/system'
 import { AppSystemProp } from '../../../../src/app/helper/system/system-props'
+import { apLockAndPublishTool } from '../../../../src/app/mcp/tools/ap-lock-and-publish'
+import { apAddBranchTool } from '../../../../src/app/mcp/tools/ap-add-branch'
+import { apAddStepTool } from '../../../../src/app/mcp/tools/ap-add-step'
 import { apBuildFlowTool } from '../../../../src/app/mcp/tools/ap-build-flow'
 import { apCreateFlowTool } from '../../../../src/app/mcp/tools/ap-create-flow'
 import { apCreateFolderTool } from '../../../../src/app/mcp/tools/ap-create-folder'
 import { apCreateTableTool } from '../../../../src/app/mcp/tools/ap-create-table'
-import { apFlowStructureTool } from '../../../../src/app/mcp/tools/ap-flow-structure'
-import { apResearchPiecesTool } from '../../../../src/app/mcp/tools/ap-research-pieces'
-import { apAddStepTool } from '../../../../src/app/mcp/tools/ap-add-step'
-import { apUpdateStepTool } from '../../../../src/app/mcp/tools/ap-update-step'
-import { apRenameFlowTool } from '../../../../src/app/mcp/tools/ap-rename-flow'
-import { apDeleteStepTool } from '../../../../src/app/mcp/tools/ap-delete-step'
-import { apLockAndPublishTool } from '../../../../src/app/mcp/tools/ap-lock-and-publish'
-import { apAddBranchTool } from '../../../../src/app/mcp/tools/ap-add-branch'
 import { apDeleteBranchTool } from '../../../../src/app/mcp/tools/ap-delete-branch'
-import { apGetPiecePropsTool } from '../../../../src/app/mcp/tools/ap-get-piece-props'
-import { apValidateStepConfigTool } from '../../../../src/app/mcp/tools/ap-validate-step-config'
-import { apValidateFlowTool } from '../../../../src/app/mcp/tools/ap-validate-flow'
-import { apUpdateTriggerTool } from '../../../../src/app/mcp/tools/ap-update-trigger'
+import { apDeleteStepTool } from '../../../../src/app/mcp/tools/ap-delete-step'
 import { apDuplicateFlowTool } from '../../../../src/app/mcp/tools/ap-duplicate-flow'
-import { apUpdateBranchTool } from '../../../../src/app/mcp/tools/ap-update-branch'
-import { apListRunsTool } from '../../../../src/app/mcp/tools/ap-list-runs'
+import { apFlowStructureTool } from '../../../../src/app/mcp/tools/ap-flow-structure'
+import { apGetPiecePropsTool } from '../../../../src/app/mcp/tools/ap-get-piece-props'
 import { apGetRunTool } from '../../../../src/app/mcp/tools/ap-get-run'
 import { apListFlowsTool } from '../../../../src/app/mcp/tools/ap-list-flows'
 import { apListFoldersTool } from '../../../../src/app/mcp/tools/ap-list-folders'
+import { apListRunsTool } from '../../../../src/app/mcp/tools/ap-list-runs'
 import { apMoveFlowToFolderTool } from '../../../../src/app/mcp/tools/ap-move-flow-to-folder'
 import { apReadStepSettingsTool } from '../../../../src/app/mcp/tools/ap-read-step-settings'
+import { apRenameFlowTool } from '../../../../src/app/mcp/tools/ap-rename-flow'
+import { apResearchPiecesTool } from '../../../../src/app/mcp/tools/ap-research-pieces'
 import { apRunActionTool } from '../../../../src/app/mcp/tools/ap-run-action'
+import { apUpdateBranchTool } from '../../../../src/app/mcp/tools/ap-update-branch'
+import { apUpdateStepTool } from '../../../../src/app/mcp/tools/ap-update-step'
+import { apUpdateTriggerTool } from '../../../../src/app/mcp/tools/ap-update-trigger'
+import { apValidateFlowTool } from '../../../../src/app/mcp/tools/ap-validate-flow'
+import { apValidateStepConfigTool } from '../../../../src/app/mcp/tools/ap-validate-step-config'
 import { mcpUtils } from '../../../../src/app/mcp/tools/mcp-utils'
 import { tableService } from '../../../../src/app/tables/table/table.service'
 import { userInteractionWatcher } from '../../../../src/app/workers/user-interaction-watcher'
@@ -1398,7 +1398,7 @@ describe('MCP Tools integration', () => {
         const result = await apBuildFlowTool({ mcp }, mockLog).execute({
             flowName: 'Build Test Reference Reasons',
             trigger: { pieceName: '@activepieces/piece-test-email', triggerName: 'new_email' },
-            steps: [{ type: FlowActionType.PIECE, displayName: 'Send Email', pieceName: '@activepieces/piece-test-email', actionName: 'send_email', input: { to: 'a@b.com', folder: "{{trigger['output'].folder}}" } }],
+            steps: [{ type: FlowActionType.PIECE, displayName: 'Send Email', pieceName: '@activepieces/piece-test-email', actionName: 'send_email', input: { to: 'a@b.com', folder: '{{trigger[\'output\'].folder}}' } }],
         })
 
         expect(text(result)).toMatch(/step_1 \([^)]*subject is missing/)
@@ -3047,7 +3047,7 @@ describe('MCP Tools integration', () => {
         expect(flowStructureUtil.getStepOrThrow('step_1', builtFlow.version.trigger).settings.input).not.toHaveProperty('bogus')
         expect(text(triggerUpdate)).not.toContain('Unknown properties')
         expect(text(stepUpdate)).not.toContain('Unknown properties')
-        expect(text(rejected)).toContain("Unknown properties: 'nope'")
+        expect(text(rejected)).toContain('Unknown properties: \'nope\'')
         expect(updatedFlow.version.trigger.settings.input).toMatchObject({ folder: 'INBOX', label: 'urgent' })
         expect(flowStructureUtil.getStepOrThrow('step_1', updatedFlow.version.trigger).settings.input).toMatchObject({ to: 'a@b.co', subject: 'Hello' })
     })
@@ -3147,7 +3147,7 @@ describe('MCP Tools integration', () => {
         const afterFailedRefresh = await flowService(mockLog).getOnePopulatedOrThrow({ id: flowId, projectId: ctx.project.id })
 
         expect(builtFlow.version.trigger.settings.propertySettings).toMatchObject({ fields: { schema } })
-        expect(stepResolveInput).toMatchObject({ input: { auth: "{{connections['my-connection']}}" } })
+        expect(stepResolveInput).toMatchObject({ input: { auth: '{{connections[\'my-connection\']}}' } })
         expect(afterRefresh.version.trigger.settings.propertySettings).toMatchObject({ fields: { schema } })
         expect(afterFailedRefresh.version.trigger.settings.propertySettings?.fields).toEqual({ type: 'MANUAL' })
     })

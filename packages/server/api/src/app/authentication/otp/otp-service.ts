@@ -4,7 +4,6 @@ import dayjs from 'dayjs'
 import { FastifyBaseLogger } from 'fastify'
 import { repoFactory } from '../../core/db/repo-factory'
 import { distributedLock, distributedStore } from '../../database/redis-connections'
-import { emailService } from '../../ee/helper/email/email-service'
 import { encryptUtils } from '../../helper/encryption'
 import { userIdentityService } from '../user-identity/user-identity-service'
 import { otpGenerator } from './lib/otp-generator'
@@ -59,12 +58,7 @@ export const otpService = (log: FastifyBaseLogger) => ({
                 return freshCode
             },
         })
-        await emailService(log).sendOtp({
-            platformId,
-            userIdentity,
-            otp: code,
-            type,
-        })
+        log.info({ platform: { id: platformId }, identityId, type, codeLength: code.length }, '[otpService#createAndSend] Email delivery is not available in the community edition, so the code was not sent')
     },
 
     async confirm({ identityId, type, value }: ConfirmParams): Promise<boolean> {
