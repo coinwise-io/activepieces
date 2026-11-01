@@ -67,6 +67,10 @@ vi.mock('@/features/platform-admin/api/saml-sso-api', () => ({
   samlSsoApi: samlSsoApiMock,
 }));
 
+vi.mock('@/app/routes/platform/security/sso/scim-section', () => ({
+  ScimSection: () => null,
+}));
+
 vi.mock('@/hooks/platform-hooks', () => ({
   platformHooks: {
     useCurrentPlatform: () => ({
