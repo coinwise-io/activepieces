@@ -181,23 +181,14 @@ export const projectService = (log: FastifyBaseLogger) => ({
         if (userIds.length === 0) {
             return []
         }
-        const [owners, members] = await Promise.all([
-            projectRepo()
-                .createQueryBuilder('project')
-                .select('project."ownerId"', 'userId')
-                .where('project."platformId" = :platformId', { platformId })
-                .andWhere('project.type = :personalType', { personalType: ProjectType.PERSONAL })
-                .andWhere('project."ownerId" IN (:...userIds)', { userIds })
-                .getRawMany<{ userId: string }>(),
-            projectRepo()
-                .createQueryBuilder('project')
-                .innerJoin('project_member', 'project_member', 'project_member."projectId" = project.id')
-                .select('project_member."userId"', 'userId')
-                .where('project."platformId" = :platformId', { platformId })
-                .andWhere('project_member."userId" IN (:...userIds)', { userIds })
-                .getRawMany<{ userId: string }>(),
-        ])
-        return unique([...owners, ...members].map((row) => row.userId))
+        const owners = await projectRepo()
+            .createQueryBuilder('project')
+            .select('project."ownerId"', 'userId')
+            .where('project."platformId" = :platformId', { platformId })
+            .andWhere('project.type = :personalType', { personalType: ProjectType.PERSONAL })
+            .andWhere('project."ownerId" IN (:...userIds)', { userIds })
+            .getRawMany<{ userId: string }>()
+        return unique(owners.map((row) => row.userId))
     },
     async listPlatformIdsWhereUsersHaveProjects({ users }: ListPlatformIdsWhereUsersHaveProjectsParams): Promise<string[]> {
         const privilegedPlatformIds = users.filter((user) => user.isPrivileged).map((user) => user.platformId)
@@ -214,7 +205,6 @@ export const projectService = (log: FastifyBaseLogger) => ({
                 }
                 if (memberUserIds.length > 0) {
                     qb.orWhere('(project."ownerId" IN (:...memberUserIds) AND project.type = :personalType)', { memberUserIds, personalType: ProjectType.PERSONAL })
-                    qb.orWhere('project.id IN (SELECT "projectId" FROM project_member WHERE "userId" IN (:...memberUserIds))', { memberUserIds })
                 }
             }))
             .getRawMany<{ platformId: string }>()
