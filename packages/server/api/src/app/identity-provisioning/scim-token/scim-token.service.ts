@@ -30,13 +30,14 @@ export const scimTokenService = (log: FastifyBaseLogger) => ({
         return tokens.map((entity) => toDto({ entity }))
     },
     async delete({ platformId, id }: DeleteParams): Promise<void> {
-        const result = await scimTokenRepo().delete({ id, platformId })
-        if (result.affected === 0) {
+        const exists = await scimTokenRepo().existsBy({ id, platformId })
+        if (!exists) {
             throw new ActivepiecesError({
                 code: ErrorCode.ENTITY_NOT_FOUND,
                 params: { entityType: 'scim_token', entityId: id },
             })
         }
+        await scimTokenRepo().delete({ id, platformId })
     },
     async authenticate({ token }: { token: string }): Promise<{ platformId: string } | null> {
         if (!token.startsWith(TOKEN_PREFIX)) {

@@ -88,10 +88,8 @@ export const scimGroupService = {
         return this.get({ platformId, id, baseUrl })
     },
     async delete({ platformId, id }: { platformId: string, id: string }): Promise<void> {
-        const result = await userGroupRepo().delete({ id, platformId })
-        if (result.affected === 0) {
-            throw scimErrors.notFound({ detail: `Group ${id} not found` })
-        }
+        const group = await findGroupOrThrow({ platformId, id })
+        await userGroupRepo().delete({ id: group.id, platformId })
     },
 }
 
