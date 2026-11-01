@@ -7,6 +7,7 @@ import {
   ResetPasswordRequestBody,
   VerifyEmailRequestBody,
   AuthenticationResponse,
+  ClaimSamlLoginRequest,
   ClaimTokenRequest,
   FederatedAuthnLoginResponse,
   SignInRequest,
@@ -45,6 +46,9 @@ export const authenticationApi = {
       '/v1/authn/federated/claim',
       request,
     );
+  },
+  claimSamlLogin(request: ClaimSamlLoginRequest) {
+    return api.post<AuthenticationResponse>('/v1/authn/saml/claim', request);
   },
   requestEmailCode(request: RequestEmailCodeRequest) {
     return api.post<void>('/v1/authentication/otp/request', request);

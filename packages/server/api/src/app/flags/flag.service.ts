@@ -1,6 +1,6 @@
 import { isNil } from '@activepieces/core-utils'
 import { apVersionUtil } from '@activepieces/server-utils'
-import { ApEdition, ApFlagId, ExecutionMode, Flag } from '@activepieces/shared'
+import { ApEdition, ApFlagId, ExecutionMode, Flag, SsoDomainVerificationStatus, ThirdPartyAuthnProvidersToShowMap } from '@activepieces/shared'
 import dayjs from 'dayjs'
 import { FastifyBaseLogger } from 'fastify'
 import { In } from 'typeorm'
@@ -11,6 +11,7 @@ import { auditLogRetentionCeiling } from '../helper/retention/audit-log-retentio
 import { system } from '../helper/system/system'
 import { AppSystemProp } from '../helper/system/system-props'
 import { knowledgeBaseSchema } from '../knowledge-base/knowledge-base-schema'
+import { platformService } from '../platform/platform.service'
 import { isToolSearchEnabled } from '../tool-search/tool-search-flag'
 import { FlagEntity } from './flag.entity'
 import { defaultTheme } from './theme'
@@ -18,7 +19,7 @@ import { webhookSecretsUtils } from './webhook-secrets-util'
 
 const flagRepo = repoFactory(FlagEntity)
 
-export const flagService = (_log: FastifyBaseLogger) => ({
+export const flagService = (log: FastifyBaseLogger) => ({
     save: async (flag: FlagType): Promise<Flag> => {
         return flagRepo().save({
             id: flag.id,
@@ -147,13 +148,19 @@ export const flagService = (_log: FastifyBaseLogger) => ({
             },
             {
                 id: ApFlagId.THIRD_PARTY_AUTH_PROVIDERS_TO_SHOW_MAP,
-                value: {},
+                value: await getThirdPartyAuthProvidersToShow({ log }),
                 created,
                 updated,
             },
             {
                 id: ApFlagId.THIRD_PARTY_AUTH_PROVIDER_REDIRECT_URL,
                 value: await domainHelper.getInternalUrl({ path: '/redirect' }),
+                created,
+                updated,
+            },
+            {
+                id: ApFlagId.SAML_AUTH_ACS_URL,
+                value: await domainHelper.getPublicApiUrl({ path: 'v1/authn/saml/acs' }),
                 created,
                 updated,
             },
@@ -345,6 +352,19 @@ export const flagService = (_log: FastifyBaseLogger) => ({
 
 
 
+async function getThirdPartyAuthProvidersToShow({ log }: GetThirdPartyAuthProvidersToShowParams): Promise<Partial<ThirdPartyAuthnProvidersToShowMap>> {
+    if (system.getEdition() === ApEdition.CLOUD) {
+        return {}
+    }
+    const platform = await platformService(log).getOldestPlatform()
+    if (isNil(platform)) {
+        return {}
+    }
+    const samlConfigured = await platformService(log).hasSamlConfigured(platform.id)
+    const domainVerified = platform.ssoDomainVerification?.status === SsoDomainVerificationStatus.VERIFIED
+    return samlConfigured && domainVerified ? { saml: true } : {}
+}
+
 function getSupportedAppWebhooks(): string[] {
     const webhookSecrets = system.get(AppSystemProp.APP_WEBHOOK_SECRETS)
     if (isNil(webhookSecrets)) {
@@ -359,6 +379,10 @@ export type FlagType =
     | BaseFlagStructure<ApFlagId.USER_CREATED, boolean>
     | BaseFlagStructure<ApFlagId.WEBHOOK_URL_PREFIX, string>
     | BaseFlagStructure<ApFlagId.TEMPLATES_CATEGORIES, string[]>
+
+type GetThirdPartyAuthProvidersToShowParams = {
+    log: FastifyBaseLogger
+}
 
 type BaseFlagStructure<K extends ApFlagId, V> = {
     id: K

@@ -68,3 +68,5 @@ export {
   RefreshAnalyticsContext,
   RefreshAnalyticsProvider,
 } from './stores/refresh-analytics-context';
+export { scimApi } from './api/scim-api';
+export { scimQueries, scimMutations, scimKeys } from './hooks/scim-hooks';

@@ -4,6 +4,7 @@ import { FastifyBaseLogger } from 'fastify'
 import { nanoid } from 'nanoid'
 import { EntityManager, IsNull } from 'typeorm'
 import { authenticationUtils } from '../authentication/authentication-utils'
+import { samlConfigValidator } from '../authentication/saml/saml-config-validator'
 import { userIdentityRepository, userIdentityService } from '../authentication/user-identity/user-identity-service'
 import { repoFactory } from '../core/db/repo-factory'
 import { transaction } from '../core/db/transaction'
@@ -153,14 +154,7 @@ export const platformService = (log: FastifyBaseLogger) => ({
         })
     },
     async update(params: UpdateParams): Promise<PlatformWithoutFederatedAuth> {
-        if (params.federatedAuthProviders?.saml !== undefined) {
-            throw new ActivepiecesError({
-                code: ErrorCode.FEATURE_DISABLED,
-                params: {
-                    message: 'SSO is not enabled for this platform',
-                },
-            })
-        }
+        const federatedAuthProvidersToSave = await normalizeFederatedAuthProviders({ federatedAuthProviders: params.federatedAuthProviders })
         const platform = params.federatedAuthProviders !== undefined
             ? await this.getOneWithFederatedAuthOrThrow(params.id)
             : await this.getOneOrThrow(params.id)
@@ -171,7 +165,7 @@ export const platformService = (log: FastifyBaseLogger) => ({
         const federatedAuthProviders = hasFederatedAuth(platform)
             ? {
                 ...platform.federatedAuthProviders,
-                ...(params.federatedAuthProviders ?? {}),
+                ...(federatedAuthProvidersToSave ?? {}),
             }
             : undefined
         const updatedPlatform = {
@@ -201,7 +195,7 @@ export const platformService = (log: FastifyBaseLogger) => ({
         log.info({ platform: { id: params.id } }, 'Platform updated')
         const { saved, locked } = await transaction(async (entityManager) => {
             const lockedPlatform = await lockPlatformForUpdate({ entityManager, platformId: params.id, includeFederatedAuth: true })
-            const signInSettingsToSave = buildSignInSettingsToSave({ lockedPlatform, params })
+            const signInSettingsToSave = buildSignInSettingsToSave({ lockedPlatform, params, federatedAuthProviders: federatedAuthProvidersToSave })
             assertLeavesAWorkingSignInMethod({ log, before: lockedPlatform, after: signInSettingsToSave })
             const savedPlatform = await platformRepo(entityManager).save({
                 ...updatedPlatform,
@@ -487,12 +481,12 @@ async function assertAuditLogRetentionDaysAllowed({ log, platform, auditLogReten
     }
 }
 
-function buildSignInSettingsToSave({ lockedPlatform, params }: BuildSignInSettingsToSaveParams): SignInSettings {
+function buildSignInSettingsToSave({ lockedPlatform, params, federatedAuthProviders }: BuildSignInSettingsToSaveParams): SignInSettings {
     return {
         emailAuthEnabled: params.emailAuthEnabled ?? lockedPlatform.emailAuthEnabled,
         googleAuthEnabled: params.googleAuthEnabled ?? lockedPlatform.googleAuthEnabled,
         ssoDomainVerification: params.ssoDomainVerification === undefined ? lockedPlatform.ssoDomainVerification : params.ssoDomainVerification,
-        federatedAuthProviders: { ...lockedPlatform.federatedAuthProviders, ...params.federatedAuthProviders },
+        federatedAuthProviders: { ...lockedPlatform.federatedAuthProviders, ...federatedAuthProviders },
     }
 }
 
@@ -511,9 +505,22 @@ function assertLeavesAWorkingSignInMethod({ log, before, after }: AssertLeavesAW
     }
 }
 
+async function normalizeFederatedAuthProviders({ federatedAuthProviders }: NormalizeFederatedAuthProvidersParams): Promise<UpdatePlatformRequestBody['federatedAuthProviders']> {
+    const saml = federatedAuthProviders?.saml
+    if (isNil(federatedAuthProviders) || isNil(saml)) {
+        return federatedAuthProviders
+    }
+    return {
+        ...federatedAuthProviders,
+        saml: await samlConfigValidator.normalize({ config: saml }),
+    }
+}
+
 async function getPlan(_log: FastifyBaseLogger, _platform: PlatformWithoutFederatedAuth): Promise<PlatformPlanLimits> {
     return {
         ...OPEN_SOURCE_PLAN,
+        ssoEnabled: true,
+        scimEnabled: true,
     }
 }
 
@@ -560,6 +567,11 @@ type SignInSettings = Pick<Platform, 'emailAuthEnabled' | 'googleAuthEnabled' | 
 type BuildSignInSettingsToSaveParams = {
     lockedPlatform: Platform
     params: UpdateParams
+    federatedAuthProviders: UpdatePlatformRequestBody['federatedAuthProviders']
+}
+
+type NormalizeFederatedAuthProvidersParams = {
+    federatedAuthProviders: UpdatePlatformRequestBody['federatedAuthProviders']
 }
 
 type AssertLeavesAWorkingSignInMethodParams = {

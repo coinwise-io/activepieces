@@ -20,6 +20,9 @@ import { FlowVersionEntity } from '../flows/flow-version/flow-version-entity'
 import { FolderEntity } from '../flows/folder/folder.entity'
 import { system } from '../helper/system/system'
 import { AppSystemProp } from '../helper/system/system-props'
+import { ScimTokenEntity } from '../identity-provisioning/scim-token/scim-token.entity'
+import { UserGroupMemberEntity } from '../identity-provisioning/user-group/user-group-member.entity'
+import { UserGroupEntity } from '../identity-provisioning/user-group/user-group.entity'
 import { KnowledgeBaseChunkEntity } from '../knowledge-base/knowledge-base-chunk.entity'
 import { KnowledgeBaseFileEntity } from '../knowledge-base/knowledge-base-file.entity'
 import { McpActivityEntity } from '../mcp/activity/mcp-activity-entity'
@@ -104,7 +107,9 @@ function getEntities(): EntitySchema<unknown>[] {
         PlatformAnalyticsReportEntity,
         // CLOUD
         EventDestinationEntity,
-
+        ScimTokenEntity,
+        UserGroupEntity,
+        UserGroupMemberEntity,
     ]
 }
 

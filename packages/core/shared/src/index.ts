@@ -28,6 +28,7 @@ export * from '@activepieces/core-utils'
 
 // management
 export * from './lib/management/platform'
+export * from './lib/management/identity-provisioning'
 export * from './lib/management/project'
 export * from './lib/management/project-role/project-role.request'
 export * from './lib/management/invitations'

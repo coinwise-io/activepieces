@@ -1,5 +1,5 @@
 import { ActivepiecesError, assertNotNullOrUndefined, ErrorCode, isNil } from '@activepieces/core-utils'
-import { ApEdition, ApEnvironment, AuthenticationResponse, EndpointScope, pickTelemetryPii, Platform, PlatformRole, PlatformWithoutSensitiveData, PrincipalType, Project, ProjectType, SsoDomainVerificationStatus, TelemetryEventName, User, UserIdentity, UserIdentityProvider, UserStatus } from '@activepieces/shared'
+import { ApEnvironment, AuthenticationResponse, EndpointScope, pickTelemetryPii, Platform, PlatformRole, PlatformWithoutSensitiveData, PrincipalType, Project, ProjectType, SsoDomainVerificationStatus, TelemetryEventName, User, UserIdentity, UserIdentityProvider, UserStatus } from '@activepieces/shared'
 import { FastifyBaseLogger, FastifyRequest } from 'fastify'
 import { system } from '../helper/system/system'
 import { AppSystemProp } from '../helper/system/system-props'
@@ -132,10 +132,6 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
         email,
         platformId,
     }: AssertDomainIsAllowedParams): Promise<void> {
-        const edition = system.getEdition()
-        if (edition === ApEdition.COMMUNITY) {
-            return
-        }
         const platform = await platformService(log).getOneWithPlanOrThrow(platformId)
         if (!platform.plan.ssoEnabled) {
             return
@@ -159,19 +155,10 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
         email,
         platformId,
     }: AssertEmailMatchesSsoDomainParams): Promise<void> {
-        const edition = system.getEdition()
-        if (edition !== ApEdition.CLOUD) {
-            return
-        }
-        const platform = await platformService(log).getOneWithPlanOrThrow(platformId)
-        if (!platform.plan.ssoEnabled) {
-            return
-        }
-        if (isNil(platform.ssoDomain) || platform.ssoDomainVerification?.status !== SsoDomainVerificationStatus.VERIFIED) {
-            return
-        }
+        const platform = await platformService(log).getOneOrThrow(platformId)
         const emailDomain = email.split('@')[1]?.toLowerCase() ?? ''
-        if (emailDomain !== platform.ssoDomain) {
+        const domainIsVerified = !isNil(platform.ssoDomain) && platform.ssoDomainVerification?.status === SsoDomainVerificationStatus.VERIFIED
+        if (!domainIsVerified || emailDomain !== platform.ssoDomain) {
             throw new ActivepiecesError({
                 code: ErrorCode.DOMAIN_NOT_ALLOWED,
                 params: {
@@ -185,10 +172,6 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
         platformId,
         provider,
     }: AssertEmailAuthIsEnabledParams): Promise<void> {
-        const edition = system.getEdition()
-        if (edition === ApEdition.COMMUNITY) {
-            return
-        }
         const platform = await platformService(log).getOneWithPlanOrThrow(platformId)
         if (!platform.plan.ssoEnabled) {
             return
@@ -268,14 +251,10 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
         return project.ownerId
     },
     getSignInMethods({ platform }: GetSignInMethodsParams): SignInMethods {
-        const edition = system.getEdition()
-        if (edition === ApEdition.COMMUNITY) {
-            return { email: true, google: false, sso: false }
-        }
         return {
             email: platform.emailAuthEnabled,
             google: isGoogleConfigured() && platform.googleAuthEnabled,
-            sso: !isNil(platform.federatedAuthProviders?.saml) && (edition !== ApEdition.CLOUD || platform.ssoDomainVerification?.status === SsoDomainVerificationStatus.VERIFIED),
+            sso: !isNil(platform.federatedAuthProviders?.saml) && platform.ssoDomainVerification?.status === SsoDomainVerificationStatus.VERIFIED,
         }
     },
 })

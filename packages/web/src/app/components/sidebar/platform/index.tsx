@@ -51,6 +51,12 @@ export function PlatformNav() {
           subItems: [
             { to: '/platform/users', label: t('Members'), end: true },
             {
+              to: '/platform/users/groups',
+              label: t('Groups'),
+              locked: !platform.plan.scimEnabled,
+              tier: PLATFORM_FEATURES.sso.tier,
+            },
+            {
               to: '/platform/users/roles',
               label: t('Roles & Access'),
               locked: !platform.plan.projectRolesEnabled,
