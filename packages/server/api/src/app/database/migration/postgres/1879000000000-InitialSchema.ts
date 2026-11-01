@@ -1,4 +1,7 @@
 import { QueryRunner } from 'typeorm'
+import { system } from '../../../helper/system/system'
+import { AppSystemProp } from '../../../helper/system/system-props'
+import { DatabaseType } from '../../database-type'
 import { Migration } from '../../migration'
 
 export class InitialSchema1879000000000 implements Migration {
@@ -8,7 +11,7 @@ export class InitialSchema1879000000000 implements Migration {
     transaction = true
 
     public async up(queryRunner: QueryRunner): Promise<void> {
-        for (const statement of SCHEMA_STATEMENTS) {
+        for (const statement of await statementsForDatabase(queryRunner)) {
             await queryRunner.query(statement)
         }
     }
@@ -18,12 +21,26 @@ export class InitialSchema1879000000000 implements Migration {
     }
 }
 
+async function statementsForDatabase(queryRunner: QueryRunner): Promise<string[]> {
+    const isPGlite = system.get(AppSystemProp.DB_TYPE) === DatabaseType.PGLITE
+    const vectorInstalled = await isVectorExtensionInstalled(queryRunner)
+    return SCHEMA_STATEMENTS
+        .filter((statement) => vectorInstalled || !VECTOR_DEPENDENT_STATEMENT.test(statement))
+        .filter((statement) => !isPGlite || !PGLITE_UNSUPPORTED_STATEMENT.test(statement))
+        .map((statement) => isPGlite ? statement.replaceAll(' COLLATE public.en_natural', '') : statement)
+}
+
+async function isVectorExtensionInstalled(queryRunner: QueryRunner): Promise<boolean> {
+    const result = await queryRunner.query('SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = $1) AS installed', ['vector'])
+    return result[0]?.installed === true
+}
+
+const VECTOR_DEPENDENT_STATEMENT = /knowledge_base_chunk|tool_search_index/
+const PGLITE_UNSUPPORTED_STATEMENT = /CREATE COLLATION public\.en_natural|USING hnsw/
+
 const SCHEMA_STATEMENTS: string[] = [
     `
         CREATE COLLATION public.en_natural (provider = icu, locale = 'en-US-u-kn');
-    `,
-    `
-        CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
     `,
     `
         CREATE TABLE public."DELETED_flow_instance" (
