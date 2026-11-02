@@ -12,6 +12,7 @@ import {
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { securityAccess } from '../core/security/authorization/fastify-security'
+import { websocketService } from '../core/websockets.service'
 import { triggerSourceService } from '../trigger/trigger-source/trigger-source-service'
 import { convertRequest, extractHeaderFromRequest } from './webhook-request-converter'
 import { WebhookFlowVersionToRun, webhookService } from './webhook.service'
@@ -88,7 +89,7 @@ export const webhookController: FastifyPluginAsyncZod = async (app) => {
             flowVersionToRun: WebhookFlowVersionToRun.LATEST,
             execute: true,
             onRunCreated: (run) => {
-                app.io.to(run.projectId).emit(WebsocketClientEvent.TEST_FLOW_RUN_STARTED, run)
+                websocketService.toRunViewers({ projectId: run.projectId, triggeredBy: run.triggeredBy }).emit(WebsocketClientEvent.TEST_FLOW_RUN_STARTED, run)
             },
             ...extractHeaderFromRequest(request),
         })

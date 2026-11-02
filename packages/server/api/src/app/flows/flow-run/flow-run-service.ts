@@ -4,6 +4,7 @@ import { ExecuteFlowJobData, ExecutionType, ExecutioOutputFile, FAILED_STATES, F
 import { FastifyBaseLogger } from 'fastify'
 import pLimit from 'p-limit'
 import { ArrayContains, In, IsNull, Not, Repository, SelectQueryBuilder } from 'typeorm'
+import { accessPolicy, ProjectAccess, RunScope } from '../../access-control/access-policy'
 import { repoFactory } from '../../core/db/repo-factory'
 import { distributedLock } from '../../database/redis-connections'
 import { fileCompressor } from '../../file/file-compressor'
@@ -120,6 +121,9 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             query = query.andWhere({
                 id: In(params.flowRunIds),
             })
+        }
+        if (!isNil(params.access)) {
+            accessPolicy.applyRunScope({ queryBuilder: query, access: params.access, runAlias: 'flow_run', projectId: params.projectId, scope: 'READ' })
         }
 
         const { data, cursor: newCursor } = await paginator.paginate(query)
@@ -240,13 +244,16 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
                     projectId: oldFlowRun.projectId,
                     failParentOnFailure: oldFlowRun.failParentOnFailure,
                     parentRunId: oldFlowRun.parentRunId,
+                    triggeredBy: oldFlowRun.triggeredBy ?? undefined,
                 })
             }
         }
     },
-    async cancel({ projectId, platformId, flowRunIds, excludeFlowRunIds, status, flowId, createdAfter, createdBefore }: CancelParams): Promise<void> {
+    async cancel({ projectId, platformId, flowRunIds, excludeFlowRunIds, status, flowId, createdAfter, createdBefore, access }: CancelParams): Promise<void> {
         const filteredStatus = status ?? CANCELLABLE_STATUSES
         const flowRuns = await filterFlowRunsAndApplyFilters({
+            access,
+            scope: 'MANAGE',
             projectId,
             flowRunIds,
             status: filteredStatus,
@@ -274,7 +281,7 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         return flowRunRepo().existsBy({ id: runId })
     },
     async bulkArchive(params: BulkArchiveActionParams): Promise<void> {
-        const filteredFlowRuns = await filterFlowRunsAndApplyFilters(params)
+        const filteredFlowRuns = await filterFlowRunsAndApplyFilters({ ...params, scope: 'MANAGE' })
         await flowRunRepo().update({
             id: In(filteredFlowRuns.map(flowRun => flowRun.id)),
             projectId: params.projectId,
@@ -288,7 +295,7 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         if (isFromFailedStepByFilter && isEmpty(statusFilter)) {
             return []
         }
-        const filteredFlowRuns = await filterFlowRunsAndApplyFilters({ ...params, status: statusFilter })
+        const filteredFlowRuns = await filterFlowRunsAndApplyFilters({ ...params, status: statusFilter, scope: 'RETRY' })
         const limit = pLimit(10)
         const results = await Promise.allSettled(
             filteredFlowRuns.map(flowRun =>
@@ -324,6 +331,7 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         platformId,
         stepNameToTest,
         environment,
+        triggeredBy,
     }: StartParams): Promise<FlowRun> {
         const newFlowRun = await queueOrCreateInstantly({
             projectId,
@@ -333,6 +341,7 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             failParentOnFailure,
             stepNameToTest,
             environment,
+            triggeredBy,
         }, log)
 
         wideEvent.set({
@@ -514,6 +523,9 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             })
             .groupBy('flow_run.status')
 
+        if (!isNil(params.access)) {
+            accessPolicy.applyRunScope({ queryBuilder: query, access: params.access, runAlias: 'flow_run', projectId: params.projectId, scope: 'READ' })
+        }
         if (params.createdAfter) {
             query = query.andWhere('flow_run.created >= :createdAfter', { createdAfter: params.createdAfter })
         }
@@ -664,6 +676,9 @@ async function filterFlowRunsAndApplyFilters(
         query = query.andWhere('flow_run."failedStep"->>\'message\' ILIKE :failedStepMessage', {
             failedStepMessage: `%${params.failedStepMessage}%`,
         })
+    }
+    if (!isNil(params.access)) {
+        accessPolicy.applyRunScope({ queryBuilder: query, access: params.access, runAlias: 'flow_run', projectId: params.projectId, scope: params.scope })
     }
 
     const flowRuns = await query.getMany()
@@ -881,6 +896,7 @@ type ListParams = {
     includeArchived?: boolean
     environment?: RunEnvironment
     parentWaitpointId?: ApId
+    access?: ProjectAccess
 }
 
 type GetOneParams = {
@@ -948,6 +964,7 @@ type StartParams = {
     httpRequestId: string | undefined
     streamStepProgress: StreamStepProgress
     sampleData?: Record<string, unknown>
+    triggeredBy?: string
 }
 
 
@@ -980,9 +997,11 @@ type CancelParams = {
     flowId?: FlowId[]
     createdAfter?: string
     createdBefore?: string
+    access?: ProjectAccess
 }
 
 type BulkRetryParams = {
+    access?: ProjectAccess
     projectId: ProjectId
     flowRunIds?: FlowRunId[]
     strategy: FlowRetryStrategy
@@ -997,6 +1016,7 @@ type BulkRetryParams = {
 }
 
 type BulkArchiveActionParams = {
+    access?: ProjectAccess
     projectId: ProjectId
     flowRunIds?: FlowRunId[]
     status?: FlowRunStatus[]
@@ -1010,12 +1030,15 @@ type BulkArchiveActionParams = {
 }
 
 type CountByStatusParams = {
+    access?: ProjectAccess
     projectId: ProjectId
     createdAfter?: string
     createdBefore?: string
 }
 
 type FilterFlowRunsAndApplyFiltersParams = {
+    access?: ProjectAccess
+    scope: RunScope
     projectId: ProjectId
     flowRunIds?: FlowRunId[]
     status?: FlowRunStatus[]

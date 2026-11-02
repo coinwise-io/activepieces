@@ -65,6 +65,7 @@ SAML 2.0 sign-in through JumpCloud once the SSO domain is DNS-verified, see *sso
 - **EE Authentication (SSO/RBAC)** — SAML 2.0, roles, enforcement
 - **SSO (SAML)** — SP-initiated SAML, SSO domain, break-glass rule
 - **SCIM** — user and group provisioning (JumpCloud)
+- **Access Grants** — EDITOR, EXECUTOR and HISTORY_READER roles on projects, folders and flows
 - **Two-factor (TOTP)** — second factor for password sign-ins, recovery codes, admin reset
 - **API Keys** — platform-scoped, hashed, `sk-` prefixed
 - **Testing OAuth2 Connects Locally** — driving a real connect on a dev box, and forcing awkward code shapes

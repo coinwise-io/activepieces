@@ -5,6 +5,7 @@ import {
     SaveTriggerEventRequest,
 } from '@activepieces/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
 import { flowService } from '../../flows/flow/flow.service'
@@ -16,6 +17,8 @@ export const triggerEventController: FastifyPluginAsyncZod = async (fastify) => 
 
 
     fastify.post('/', SaveTriggerEventRequestParams, async (request) => {
+        const guard = accessGuard(request.log)
+        await guard.assertFlowById({ access: await guard.forRequest({ request }), projectId: request.projectId, flowId: request.body.flowId, capability: 'EDIT' })
         return triggerEventService(request.log).saveEvent({
             projectId: request.projectId,
             flowId: request.body.flowId,
@@ -28,6 +31,8 @@ export const triggerEventController: FastifyPluginAsyncZod = async (fastify) => 
             id: request.query.flowId,
             projectId: request.projectId,
         })
+        const guard = accessGuard(request.log)
+        guard.assertFlow({ access: await guard.forRequest({ request }), projectId: request.projectId, flow: { id: flow.id, folderId: flow.folderId ?? null }, capability: 'READ_RUNS' })
 
         return triggerEventService(request.log).list({
             projectId: request.projectId,

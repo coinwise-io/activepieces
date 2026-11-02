@@ -1,7 +1,14 @@
 import { isNil, Permission, tryCatch } from '@activepieces/core-utils';
 import { ApFlagId, PlatformRole, ProjectType } from '@activepieces/shared';
 import { t } from 'i18next';
-import { Bell, GitBranch, Puzzle, Settings, Users } from 'lucide-react';
+import {
+  Bell,
+  GitBranch,
+  Puzzle,
+  Settings,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -11,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { INTERNAL_ERROR_MESSAGE } from '@/components/ui/sonner';
+import { accessControlHooks } from '@/features/access-control';
 import { projectCollectionUtils } from '@/features/projects';
 import { ApProjectDisplay } from '@/features/projects/components/ap-project-display';
 import { useAuthorization } from '@/hooks/authorization-hooks';
@@ -22,6 +30,7 @@ import { cn } from '@/lib/utils';
 
 import { ProjectAvatar } from '../project-avatar';
 
+import { AccessSettings } from './access';
 import { AlertsSettings } from './alerts';
 import { EnvironmentSettings } from './environment';
 import { projectSettingsFormDefaults } from './form-defaults';
@@ -29,7 +38,13 @@ import { GeneralSettings, FormValues } from './general';
 import { MembersSettings } from './members';
 import { PiecesSettings } from './pieces';
 
-type TabId = 'general' | 'members' | 'alerts' | 'pieces' | 'environment';
+type TabId =
+  | 'general'
+  | 'members'
+  | 'access'
+  | 'alerts'
+  | 'pieces'
+  | 'environment';
 
 interface ProjectSettingsDialogProps {
   open: boolean;
@@ -46,6 +61,10 @@ export function ProjectSettingsDialog({
   const { checkAccess } = useAuthorization();
   const { project } = projectCollectionUtils.useCurrentProject();
   const previousOpenRef = useRef(open);
+  const { data: effectiveAccess } = accessControlHooks.useEffectiveAccess({
+    request: { projectId: project.id },
+    enabled: open,
+  });
 
   const { data: showAlerts } = flagsHooks.useFlag(ApFlagId.SHOW_ALERTS);
   const { data: showProjectMembers } = flagsHooks.useFlag(
@@ -114,6 +133,13 @@ export function ProjectSettingsDialog({
         !showProjectMembers,
     },
     {
+      id: 'access' as TabId,
+      label: t('Access'),
+      icon: <ShieldCheck className="w-4 h-4" />,
+      disabled:
+        project.type !== ProjectType.TEAM || !effectiveAccess?.canManageAccess,
+    },
+    {
       id: 'alerts' as TabId,
       label: t('Alert Emails'),
       icon: <Bell className="w-4 h-4" />,
@@ -139,6 +165,8 @@ export function ProjectSettingsDialog({
         return <GeneralSettings form={form} />;
       case 'members':
         return <MembersSettings />;
+      case 'access':
+        return <AccessSettings projectId={project.id} />;
       case 'alerts':
         return <AlertsSettings />;
       case 'pieces':

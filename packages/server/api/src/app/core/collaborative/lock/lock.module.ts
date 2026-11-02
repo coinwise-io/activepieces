@@ -1,8 +1,10 @@
 import { isNil } from '@activepieces/core-utils'
 import { LockResourceRequest, PrincipalType, WebsocketClientEvent, WebsocketServerEvent } from '@activepieces/shared'
-import { FastifyInstance } from 'fastify'
+import { FastifyBaseLogger, FastifyInstance } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { Socket } from 'socket.io'
+import { accessGuard } from '../../../access-control/access-guard'
+import { accessPolicy, FlowRef } from '../../../access-control/access-policy'
 import { userService } from '../../../user/user-service'
 import { websocketService } from '../../websockets.service'
 import { collaborativeResource } from '../collaborative-resource'
@@ -25,7 +27,9 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
                     callback?.({ acquired: false, lock: null })
                     return
                 }
-                if (!websocketService.socketHasPermission({ socket, permission: resource.writePermission })) {
+                const canWriteResource = websocketService.socketHasPermission({ socket, permission: resource.writePermission })
+                    && await canEditFlowResource({ flow: resource.flow, userId: principal.id, projectId, log: app.log })
+                if (!canWriteResource) {
                     app.log.debug({ resourceId, user: { id: principal.id }, project: { id: projectId } }, '[LOCK_RESOURCE] Denied: missing write permission')
                     callback?.({ acquired: false, lock: null })
                     return
@@ -90,6 +94,14 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
     })
 }
 
+async function canEditFlowResource({ flow, userId, projectId, log }: CanEditFlowResourceParams): Promise<boolean> {
+    if (isNil(flow)) {
+        return true
+    }
+    const access = await accessGuard(log).forUser({ userId, projectId })
+    return accessPolicy.canOnFlow({ access, flow, capability: 'EDIT' })
+}
+
 const lockedResourcesBySocket = new WeakMap<Socket, ReadonlyMap<string, string | null>>()
 const socketsWithLockDisconnectHandler = new WeakSet<Socket>()
 
@@ -127,6 +139,13 @@ function registerLockDisconnectHandler({ socket, userId, projectId, app }: Regis
             }
         }
     })
+}
+
+type CanEditFlowResourceParams = {
+    flow: FlowRef | null
+    userId: string
+    projectId: string
+    log: FastifyBaseLogger
 }
 
 type TrackParams = {

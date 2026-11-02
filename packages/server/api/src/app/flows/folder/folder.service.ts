@@ -1,6 +1,7 @@
-import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, ProjectId, SeekPage } from '@activepieces/core-utils'
+import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, Permission, ProjectId, SeekPage } from '@activepieces/core-utils'
 import { CreateFolderRequest, Folder, FolderDto, FolderId, UpdateFolderRequest } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
+import { accessPolicy, ProjectAccess } from '../../access-control/access-policy'
 import { repoFactory } from '../../core/db/repo-factory'
 import { distributedLock } from '../../database/redis-connections'
 import { buildPaginator } from '../../helper/pagination/build-paginator'
@@ -104,7 +105,7 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
         await folderRepo().delete({ id: existing.id, projectId })
     },
     async list(params: ListParams): Promise<SeekPage<FolderDto>> {
-        const { projectId, cursorRequest, limit } = params
+        const { projectId, cursorRequest, limit, access } = params
         const decodedCursor = paginationHelper.decodeCursor(cursorRequest)
         const paginator = buildPaginator({
             entity: FolderEntity,
@@ -128,6 +129,10 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
                 .from('table', 'tbl')
                 .where('tbl."folderId" = folder.id'), 'numberOfTables')
 
+        if (!isNil(access)) {
+            accessPolicy.applyFolderScope({ queryBuilder, access, folderAlias: 'folder', projectId })
+        }
+
         const paginationResponse = await paginator.paginate<FolderDto>(queryBuilder)
         return paginationHelper.createPage(paginationResponse.data, paginationResponse.cursor)
     },
@@ -139,8 +144,11 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             .getOne()
     },
     async getOneOrThrow(params: GetOneOrThrowParams): Promise<FolderDto> {
-        const { projectId, folderId } = params
+        const { projectId, folderId, access } = params
         const folder = await folderRepo().findOneBy({ projectId, id: folderId })
+        if (!isNil(access) && !access.unrestricted) {
+            await assertFolderVisible({ access, projectId, folderId })
+        }
         if (!folder) {
             throw new ActivepiecesError({
                 code: ErrorCode.ENTITY_NOT_FOUND,
@@ -160,6 +168,16 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
         }
     },
 })
+
+async function assertFolderVisible({ access, projectId, folderId }: { access: ProjectAccess, projectId: ProjectId, folderId: FolderId }): Promise<void> {
+    const queryBuilder = folderRepo()
+        .createQueryBuilder('folder')
+        .where('folder."projectId" = :projectId AND folder."id" = :folderId', { projectId, folderId })
+    accessPolicy.applyFolderScope({ queryBuilder, access, folderAlias: 'folder', projectId })
+    const visible = await queryBuilder.getExists()
+    const exists = await folderRepo().existsBy({ projectId, id: folderId })
+    accessPolicy.assertCan({ allowed: visible || !exists, userId: access.userId, projectId, permission: Permission.READ_FOLDER })
+}
 
 function folderUpsertLockKey({ projectId, displayName }: { projectId: ProjectId, displayName: string }): string {
     return `folder-upsert-${projectId}-${displayName.trim().toLowerCase()}`
@@ -187,6 +205,7 @@ type ListParams = {
     projectId: ProjectId
     cursorRequest: Cursor | null
     limit: number
+    access?: ProjectAccess
 }
 
 type GetOneByDisplayNameParams = {
@@ -197,6 +216,7 @@ type GetOneByDisplayNameParams = {
 type GetOneOrThrowParams = {
     projectId: ProjectId
     folderId: FolderId
+    access?: ProjectAccess
 }
 
 type ListAllParams = {

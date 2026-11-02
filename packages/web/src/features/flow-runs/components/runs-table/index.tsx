@@ -175,7 +175,8 @@ export const RunsTable = () => {
   const openNewWindow = useNewWindow();
   const flows = flowsData?.data;
   const { checkAccess } = useAuthorization();
-  const userHasPermissionToRetryRun = checkAccess(Permission.WRITE_RUN);
+  const userHasPermissionToRetryRun =
+    checkAccess(Permission.WRITE_RUN) || checkAccess(Permission.EXECUTE_FLOW);
 
   const filters: DataTableFilters<keyof FlowRun | 'failedStepMessage'>[] =
     useMemo(

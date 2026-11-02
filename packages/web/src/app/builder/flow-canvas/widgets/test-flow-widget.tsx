@@ -38,7 +38,8 @@ const TestFlowWidget = () => {
   const builderStore = useBuilderStore();
 
   const { checkAccess } = useAuthorization();
-  const userHasPermissionToRun = checkAccess(Permission.WRITE_RUN);
+  const userHasPermissionToRun =
+    checkAccess(Permission.WRITE_RUN) || checkAccess(Permission.EXECUTE_FLOW);
 
   const triggerHasSampleData =
     flowVersion.trigger.type === FlowTriggerType.PIECE &&

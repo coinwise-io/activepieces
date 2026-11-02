@@ -148,3 +148,32 @@ export function hasExportableItems(selected: SelectedItemsMap) {
     (type) => type === 'flow' || type === 'table',
   );
 }
+
+export function canModifySelection({
+  selected,
+  canWriteFlow,
+  canWriteTable,
+  canWriteFolder,
+  canWriteAgent,
+}: {
+  selected: SelectedItemsMap;
+  canWriteFlow: boolean;
+  canWriteTable: boolean;
+  canWriteFolder: boolean;
+  canWriteAgent: boolean;
+}) {
+  return [...selected.values()].every((type) => {
+    switch (type) {
+      case 'flow':
+        return canWriteFlow;
+      case 'table':
+        return canWriteTable;
+      case 'folder':
+        return canWriteFolder;
+      case 'agent':
+        return canWriteAgent;
+      default:
+        return true;
+    }
+  });
+}

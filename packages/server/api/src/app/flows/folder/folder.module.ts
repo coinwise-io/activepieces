@@ -1,8 +1,10 @@
 import { Permission } from '@activepieces/core-utils'
 import { ApplicationEventName, CreateFolderRequest, DeleteFolderRequest, ListFolderRequest, PrincipalType, SERVICE_KEY_SECURITY_OPENAPI, UpdateFolderRequest } from '@activepieces/shared'
+import { FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { entitiesMustBeOwnedByCurrentProject } from '../../authentication/authorization'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
@@ -19,6 +21,7 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
     fastify.addHook('preSerialization', entitiesMustBeOwnedByCurrentProject)
 
     fastify.post('/', CreateFolderParams, async (request) => {
+        await assertProjectEditor({ request })
         const createdFolder = await folderService(request.log).upsert({
             projectId: request.projectId,
             request: request.body,
@@ -37,6 +40,7 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
         '/:id',
         UpdateFolderParams,
         async (request) => {
+            await assertProjectEditor({ request })
             const updatedFlow = await folderService(request.log).update({
                 projectId: request.projectId,
                 folderId: request.params.id,
@@ -63,6 +67,7 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
             return folderService(request.log).getOneOrThrow({
                 projectId: request.projectId,
                 folderId: request.params.id,
+                access: await accessGuard(request.log).forRequest({ request }),
             })
         },
     )
@@ -72,6 +77,7 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
         ListFoldersParams,
         async (request) => {
             return folderService(request.log).list({
+                access: await accessGuard(request.log).forRequest({ request }),
                 projectId: request.projectId,
                 cursorRequest: request.query.cursor ?? null,
                 limit: request.query.limit ?? DEFAULT_PAGE_SIZE,
@@ -83,6 +89,7 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
         '/:id',
         DeleteFolderParams,
         async (request, reply) => {
+            await assertProjectEditor({ request })
             const folder = await folderService(request.log).getOneOrThrow({
                 projectId: request.projectId,
                 folderId: request.params.id,
@@ -102,6 +109,14 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
     )
 }
 
+
+async function assertProjectEditor({ request }: { request: FastifyRequest }): Promise<void> {
+    await accessGuard(request.log).assertProjectForRequest({
+        request,
+        capability: 'EDIT',
+        permission: Permission.WRITE_FLOW,
+    })
+}
 
 const CreateFolderParams = {
     config: {

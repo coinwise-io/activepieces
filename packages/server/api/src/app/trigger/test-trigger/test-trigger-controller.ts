@@ -1,5 +1,6 @@
 import { CancelTestTriggerRequestBody, PrincipalType, TestTriggerRequestBody } from '@activepieces/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
 import { testTriggerService } from '../../trigger/test-trigger/test-trigger-service'
@@ -7,6 +8,8 @@ import { testTriggerService } from '../../trigger/test-trigger/test-trigger-serv
 export const testTriggerController: FastifyPluginAsyncZod = async (app) => {
     app.post('/', TestTriggerRequest, async (req) => {
         const { flowId, flowVersionId, testStrategy } = req.body
+        const guard = accessGuard(req.log)
+        await guard.assertFlowById({ access: await guard.forRequest({ request: req }), projectId: req.projectId, flowId, capability: 'EDIT' })
 
         const logWithContext = req.log.child({
             flow: { id: flowId },
@@ -23,6 +26,8 @@ export const testTriggerController: FastifyPluginAsyncZod = async (app) => {
     })
     app.delete('/', CancelTestTriggerRequest, async (req) => {
         const { flowId } = req.body
+        const guard = accessGuard(req.log)
+        await guard.assertFlowById({ access: await guard.forRequest({ request: req }), projectId: req.projectId, flowId, capability: 'EDIT' })
 
         return testTriggerService(req.log).cancel({
             flowId,

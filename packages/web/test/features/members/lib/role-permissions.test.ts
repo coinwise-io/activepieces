@@ -20,40 +20,43 @@ const row = (key: string): PermissionRow => {
   return found;
 };
 
-const EXPECTED_MAPPING: [string, Permission | undefined, Permission | undefined][] =
+const EXPECTED_MAPPING: [
+  string,
+  Permission | undefined,
+  Permission | undefined,
+][] = [
+  ['flows', Permission.READ_FLOW, Permission.WRITE_FLOW],
+  ['flow-status', undefined, Permission.UPDATE_FLOW_STATUS],
+  ['folders', Permission.READ_FOLDER, Permission.WRITE_FOLDER],
+  ['tables', Permission.READ_TABLE, Permission.WRITE_TABLE],
+  ['agents', Permission.READ_AGENT, Permission.WRITE_AGENT],
   [
-    ['flows', Permission.READ_FLOW, Permission.WRITE_FLOW],
-    ['flow-status', undefined, Permission.UPDATE_FLOW_STATUS],
-    ['folders', Permission.READ_FOLDER, Permission.WRITE_FOLDER],
-    ['tables', Permission.READ_TABLE, Permission.WRITE_TABLE],
-    ['agents', Permission.READ_AGENT, Permission.WRITE_AGENT],
-    [
-      'knowledge-base',
-      Permission.READ_KNOWLEDGE_BASE,
-      Permission.WRITE_KNOWLEDGE_BASE,
-    ],
-    ['variables', Permission.READ_VARIABLE, Permission.WRITE_VARIABLE],
-    ['mcp-servers', Permission.READ_MCP, Permission.WRITE_MCP],
-    ['runs', Permission.READ_RUN, Permission.WRITE_RUN],
-    ['alerts', Permission.READ_ALERT, Permission.WRITE_ALERT],
-    [
-      'app-connections',
-      Permission.READ_APP_CONNECTION,
-      Permission.WRITE_APP_CONNECTION,
-    ],
-    [
-      'project-releases',
-      Permission.READ_PROJECT_RELEASE,
-      Permission.WRITE_PROJECT_RELEASE,
-    ],
-    [
-      'project-members',
-      Permission.READ_PROJECT_MEMBER,
-      Permission.WRITE_PROJECT_MEMBER,
-    ],
-    ['invitations', Permission.READ_INVITATION, Permission.WRITE_INVITATION],
-    ['project-settings', Permission.READ_PROJECT, Permission.WRITE_PROJECT],
-  ];
+    'knowledge-base',
+    Permission.READ_KNOWLEDGE_BASE,
+    Permission.WRITE_KNOWLEDGE_BASE,
+  ],
+  ['variables', Permission.READ_VARIABLE, Permission.WRITE_VARIABLE],
+  ['mcp-servers', Permission.READ_MCP, Permission.WRITE_MCP],
+  ['runs', Permission.READ_RUN, Permission.WRITE_RUN],
+  ['alerts', Permission.READ_ALERT, Permission.WRITE_ALERT],
+  [
+    'app-connections',
+    Permission.READ_APP_CONNECTION,
+    Permission.WRITE_APP_CONNECTION,
+  ],
+  [
+    'project-releases',
+    Permission.READ_PROJECT_RELEASE,
+    Permission.WRITE_PROJECT_RELEASE,
+  ],
+  [
+    'project-members',
+    Permission.READ_PROJECT_MEMBER,
+    Permission.WRITE_PROJECT_MEMBER,
+  ],
+  ['invitations', Permission.READ_INVITATION, Permission.WRITE_INVITATION],
+  ['project-settings', Permission.READ_PROJECT, Permission.WRITE_PROJECT],
+];
 
 describe('the permission grid mapping', () => {
   it.each(EXPECTED_MAPPING)(
@@ -79,7 +82,10 @@ describe('the permission grid mapping', () => {
     const missing = Object.values(Permission).filter(
       (permission) => !inGrid.has(permission),
     );
-    expect(missing).toEqual([Permission.PUBLISH_SENSITIVE_FLOW_ACCESS]);
+    expect(missing).toEqual([
+      Permission.EXECUTE_FLOW,
+      Permission.PUBLISH_SENSITIVE_FLOW_ACCESS,
+    ]);
   });
 
   it('has 29 boxes, which is what the counter promises', () => {

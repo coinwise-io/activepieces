@@ -126,6 +126,7 @@ async function listProjectsForUser({ platformId, userId, displayName, types, log
         userId,
         isPrivileged: userService(log).isUserPrivileged(user),
         displayName,
+        includeGrantedProjects: true,
     })
     const visible = projects.filter((project) => project.type !== ProjectType.PERSONAL || project.ownerId === userId)
     return isNil(types) || types.length === 0 ? visible : visible.filter((project) => types.includes(project.type))

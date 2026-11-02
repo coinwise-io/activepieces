@@ -18,7 +18,6 @@ import {
   Share2,
   Trash2,
   UploadCloud,
-  User,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -34,13 +33,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { AccessDialog, AccessMenuItem } from '@/features/access-control';
 import { MoveToFolderDialog } from '@/features/automations/components/move-to-folder-dialog';
 import { RenameDialog } from '@/features/automations/components/rename-dialog';
 import { flowHooks, flowsApi } from '@/features/flows';
-import { ChangeOwnerDialog } from '@/features/flows/components/change-owner-dialog';
 import { ImportFlowDialog } from '@/features/flows/components/import-flow-dialog';
 import { foldersHooks } from '@/features/folders';
-import { projectMembersHooks } from '@/features/members';
 import { gitSyncHooks } from '@/features/project-releases';
 import { PublishedNeededTooltip } from '@/features/project-releases/components/published-tooltip';
 import { PushToGitDialog } from '@/features/project-releases/components/push-to-git-dialog';
@@ -60,7 +58,6 @@ type FlowActionMenuProps = {
   onMoveTo: (folderId: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
-  onOwnerChange?: () => void;
 } & (
   | {
       insideBuilder: true;
@@ -83,7 +80,6 @@ const FlowActionMenu: React.FC<FlowActionMenuProps> = ({
   onMoveTo,
   onDuplicate,
   onDelete,
-  onOwnerChange,
   onVersionsListClick,
   insideBuilder,
   savePendingEdits,
@@ -109,9 +105,8 @@ const FlowActionMenu: React.FC<FlowActionMenuProps> = ({
   const allowPush =
     flow.publishedVersionId !== null &&
     flow.version.state === FlowVersionState.LOCKED;
-  const { projectMembers } = projectMembersHooks.useProjectMembers();
-  const hasProjectMembers = projectMembers && projectMembers.length > 0;
 
+  const [isAccessOpen, setIsAccessOpen] = useState(false);
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(flowVersion.displayName);
   const [isMoveOpen, setIsMoveOpen] = useState(false);
@@ -267,27 +262,6 @@ const FlowActionMenu: React.FC<FlowActionMenuProps> = ({
               </DropdownMenuItem>
             </PermissionNeededTooltip>
           )}
-          {!readonly && hasProjectMembers && !embedState.isEmbedded && (
-            <PermissionNeededTooltip
-              hasPermission={userHasPermissionToUpdateFlow}
-            >
-              <ChangeOwnerDialog
-                flow={flow}
-                onOwnerChange={onOwnerChange || (() => {})}
-              >
-                <DropdownMenuItem
-                  disabled={!userHasPermissionToUpdateFlow}
-                  onSelect={(e) => e.preventDefault()}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex cursor-pointer  flex-row gap-2 items-center">
-                    <User className="h-4 w-4" />
-                    <span>{t('Change Owner')}</span>
-                  </div>
-                </DropdownMenuItem>
-              </ChangeOwnerDialog>
-            </PermissionNeededTooltip>
-          )}
           {!embedState.hideDuplicateFlow && (
             <PermissionNeededTooltip
               hasPermission={userHasPermissionToUpdateFlow}
@@ -367,6 +341,15 @@ const FlowActionMenu: React.FC<FlowActionMenuProps> = ({
               </DropdownMenuItem>
             </ShareTemplateDialog>
           )}
+          {!embedState.isEmbedded && (
+            <AccessMenuItem
+              target={{ projectId: flow.projectId, flowId: flow.id }}
+              onOpen={() => {
+                setOpen(false);
+                setIsAccessOpen(true);
+              }}
+            />
+          )}
           {!readonly &&
             (!embedState.isEmbedded ||
               !embedState.disableNavigationInBuilder ||
@@ -414,6 +397,12 @@ const FlowActionMenu: React.FC<FlowActionMenuProps> = ({
             )}
         </DropdownMenuContent>
       </DropdownMenu>
+      <AccessDialog
+        open={isAccessOpen}
+        onOpenChange={setIsAccessOpen}
+        target={{ projectId: flow.projectId, flowId: flow.id }}
+        entityName={flowVersion.displayName}
+      />
       <RenameDialog
         open={isRenameOpen}
         onOpenChange={setIsRenameOpen}

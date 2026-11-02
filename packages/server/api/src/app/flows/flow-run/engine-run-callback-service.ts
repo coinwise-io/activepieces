@@ -1,4 +1,4 @@
-import { isNil, tryCatch } from '@activepieces/core-utils'
+import { isNil, isObject, tryCatch } from '@activepieces/core-utils'
 import { ApEdition, ExecutioOutputFile, FileCompression, FileType, FlowRunStatus, isFlowRunStateTerminal, logSerializer, RunInternalError, RunInternalErrorSource, SendFlowResponseRequest, StreamStepProgress, truncateFailedStepMessage, UpdateStepProgressRequest, UploadRunLogsRequest, WebsocketClientEvent } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
@@ -9,15 +9,17 @@ import { pubsub } from '../../helper/pubsub'
 import { system } from '../../helper/system/system'
 import { projectService } from '../../project/project-service'
 import { RunsMetadataUpsertData } from '../../workers/job'
+import { flowRunRepo } from './flow-run-service'
 import { runsMetadataQueue } from './flow-runs-queue'
 
 export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
     updateRunProgress({ projectId, request }: UpdateRunProgressParams): void {
-        websocketService.to(projectId).emit(WebsocketClientEvent.UPDATE_RUN_PROGRESS, request)
+        websocketService.toRunViewers({ projectId, triggeredBy: triggeredByOfRunProgress(request) }).emit(WebsocketClientEvent.UPDATE_RUN_PROGRESS, request)
     },
 
-    updateStepProgress({ projectId, request }: UpdateStepProgressParams): void {
-        websocketService.to(projectId).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, request)
+    async updateStepProgress({ projectId, request }: UpdateStepProgressParams): Promise<void> {
+        const triggeredBy = await findTriggeredBy({ runId: request.runId, projectId })
+        websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, request)
     },
 
     async sendFlowResponse({ request }: SendFlowResponseParams): Promise<void> {
@@ -73,11 +75,12 @@ export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
 
         if (request.stepResponse && request.streamStepProgress === StreamStepProgress.WEBSOCKET) {
             const stepData = { ...request.stepResponse, projectId }
+            const triggeredBy = await findTriggeredBy({ runId: request.runId, projectId })
             if (!isTerminal) {
-                websocketService.to(projectId).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, stepData)
+                websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, stepData)
             }
             else {
-                websocketService.to(projectId).emit(WebsocketClientEvent.TEST_STEP_FINISHED, stepData)
+                websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_FINISHED, stepData)
             }
         }
     },
@@ -91,6 +94,19 @@ const FAILED_RUN_SYNC_STATUSES = [
     FlowRunStatus.LOG_SIZE_EXCEEDED,
 ]
 const FAILED_RUN_SYNC_MESSAGE = 'The flow has failed and there is no response returned'
+
+function triggeredByOfRunProgress(request: unknown): string | null {
+    if (!isObject(request) || !isObject(request.flowRun)) {
+        return null
+    }
+    const triggeredBy = request.flowRun.triggeredBy
+    return typeof triggeredBy === 'string' ? triggeredBy : null
+}
+
+async function findTriggeredBy({ runId, projectId }: { runId: string, projectId: string }): Promise<string | null> {
+    const run = await flowRunRepo().findOne({ select: { id: true, triggeredBy: true }, where: { id: runId, projectId } })
+    return run?.triggeredBy ?? null
+}
 
 async function ensureLogsFileExists({ log, projectId, logsFileId, internalError }: EnsureLogsFileParams): Promise<void> {
     const { error } = await tryCatch(async () => {

@@ -1,7 +1,8 @@
 import { ActivepiecesError, ErrorCode, isNil, Permission } from '@activepieces/core-utils'
-import { ApiToWorkerContract, createNotifyClient, DefaultProjectRole, Principal, PrincipalForType, PrincipalType, rolePermissions, WebsocketServerEvent } from '@activepieces/shared'
+import { ApiToWorkerContract, createNotifyClient, Principal, PrincipalForType, PrincipalType, WebsocketServerEvent } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { Socket } from 'socket.io'
+import { accessPolicy, ProjectAccess } from '../access-control/access-policy'
 import { accessTokenManager } from '../authentication/lib/access-token-manager'
 import { rejectedPromiseHandler } from '../helper/promise-handler'
 import { projectAccess } from '../project/project-access'
@@ -21,11 +22,15 @@ const listener = {
 
 const eventPermissions: Partial<Record<WebsocketServerEvent, Permission>> = {}
 
-const projectRoleBySocket = new WeakMap<Socket, DefaultProjectRole>()
+const projectAccessBySocket = new WeakMap<Socket, ProjectAccess>()
 
 export const websocketService = {
     to: (workerId: string) => app!.io.to(workerId),
-    socketHasPermission: ({ socket, permission }: SocketHasPermissionParams): boolean => hasPermission(projectRoleBySocket.get(socket), permission),
+    socketHasPermission: ({ socket, permission }: SocketHasPermissionParams): boolean => hasPermission(projectAccessBySocket.get(socket), permission),
+    toRunViewers: ({ projectId, triggeredBy }: ToRunViewersParams) => {
+        const rooms = isNil(triggeredBy) ? [runViewersRoomName(projectId)] : [runViewersRoomName(projectId), triggeredBy]
+        return app!.io.to(rooms)
+    },
     notifyWorkers: () => createNotifyClient<ApiToWorkerContract>(app!.io.to(WORKERS_ROOM)),
     async init(socket: Socket, log: FastifyBaseLogger): Promise<void> {
         const listenersAttached = attachListeners({ socket, log })
@@ -68,11 +73,11 @@ async function attachListeners({ socket, log }: AttachListenersParams): Promise<
 
     const castedType = type as keyof typeof listener
     const projectId = socket.handshake.auth.projectId
-    let projectRole: DefaultProjectRole | undefined
+    let access: ProjectAccess | undefined
     switch (type) {
         case PrincipalType.USER: {
-            projectRole = await validateProjectId({ userId: principal.id, projectId, log })
-            projectRoleBySocket.set(socket, projectRole)
+            access = await validateProjectId({ userId: principal.id, projectId, log })
+            projectAccessBySocket.set(socket, access)
             log.info({
                 message: 'User connected',
                 user: { id: principal.id },
@@ -80,6 +85,9 @@ async function attachListeners({ socket, log }: AttachListenersParams): Promise<
             })
             await socket.join(projectId)
             await socket.join(principal.id)
+            if (accessPolicy.hasCapability({ roles: accessPolicy.rolesOnProject({ access }), capability: 'READ_RUNS' })) {
+                await socket.join(runViewersRoomName(projectId))
+            }
             break
         }
         case PrincipalType.WORKER: {
@@ -110,7 +118,7 @@ async function attachListeners({ socket, log }: AttachListenersParams): Promise<
             const requiredPermission = castedType === PrincipalType.USER
                 ? eventPermissions[event as WebsocketServerEvent]
                 : undefined
-            if (!isNil(requiredPermission) && !hasPermission(projectRole, requiredPermission)) {
+            if (!isNil(requiredPermission) && !hasPermission(access, requiredPermission)) {
                 log.warn({ event, userId: principal.id, projectId, requiredPermission }, 'Websocket event blocked: missing permission')
                 return
             }
@@ -119,7 +127,7 @@ async function attachListeners({ socket, log }: AttachListenersParams): Promise<
     }
 }
 
-const validateProjectId = async ({ userId, projectId, log }: ValidateProjectIdArgs): Promise<DefaultProjectRole> => {
+const validateProjectId = async ({ userId, projectId, log }: ValidateProjectIdArgs): Promise<ProjectAccess> => {
     if (isNil(projectId)) {
         throw new ActivepiecesError({
             code: ErrorCode.AUTHENTICATION,
@@ -128,12 +136,12 @@ const validateProjectId = async ({ userId, projectId, log }: ValidateProjectIdAr
             },
         })
     }
-    const role = await projectAccess(log).getRole({
+    const access = await projectAccess(log).resolveForUser({
         projectId,
         userId,
     })
 
-    if (isNil(role)) {
+    if (isNil(access)) {
         throw new ActivepiecesError({
             code: ErrorCode.AUTHORIZATION,
             params: {
@@ -141,17 +149,26 @@ const validateProjectId = async ({ userId, projectId, log }: ValidateProjectIdAr
             },
         })
     }
-    return role
+    return access
 }
 
-function hasPermission(role: DefaultProjectRole | undefined, permission: Permission): boolean {
-    return !isNil(role) && rolePermissions[role].includes(permission)
+function hasPermission(access: ProjectAccess | undefined, permission: Permission): boolean {
+    return !isNil(access) && access.permissions.includes(permission)
+}
+
+function runViewersRoomName(projectId: string): string {
+    return `${projectId}:run-viewers`
 }
 
 type ValidateProjectIdArgs = {
     userId: string
     projectId?: string
     log: FastifyBaseLogger
+}
+
+type ToRunViewersParams = {
+    projectId: string
+    triggeredBy: string | null | undefined
 }
 
 type SocketHasPermissionParams = {

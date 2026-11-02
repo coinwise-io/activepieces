@@ -51,6 +51,7 @@ type AutomationsTableProps = {
   onCreateInFolder?: (folderId: string, kind: CreateInFolderKind) => void;
   userHasPermissionToWriteFlow?: boolean;
   userHasPermissionToWriteTable?: boolean;
+  userHasPermissionToWriteFolder?: boolean;
   userHasPermissionToWriteAgent: boolean;
   agentsVisible: boolean;
   isCreatingFlow?: boolean;
@@ -125,6 +126,7 @@ export const AutomationsTable = ({
   onCreateInFolder,
   userHasPermissionToWriteFlow,
   userHasPermissionToWriteTable,
+  userHasPermissionToWriteFolder,
   userHasPermissionToWriteAgent,
   agentsVisible,
   isCreatingFlow,
@@ -249,6 +251,9 @@ export const AutomationsTable = ({
                         userHasPermissionToWriteTable={
                           userHasPermissionToWriteTable
                         }
+                        userHasPermissionToWriteFolder={
+                          userHasPermissionToWriteFolder
+                        }
                         userHasPermissionToWriteAgent={
                           userHasPermissionToWriteAgent
                         }
@@ -288,6 +293,15 @@ export const AutomationsTable = ({
                             onMoveTo={onMoveItem}
                             onExportFlow={onExportFlow}
                             onExportTable={onExportTable}
+                            userHasPermissionToWriteFlow={
+                              userHasPermissionToWriteFlow
+                            }
+                            userHasPermissionToWriteTable={
+                              userHasPermissionToWriteTable
+                            }
+                            userHasPermissionToWriteFolder={
+                              userHasPermissionToWriteFolder
+                            }
                             userHasPermissionToWriteAgent={
                               userHasPermissionToWriteAgent
                             }
@@ -330,6 +344,13 @@ export const AutomationsTable = ({
                     onMoveTo={onMoveItem}
                     onExportFlow={onExportFlow}
                     onExportTable={onExportTable}
+                    userHasPermissionToWriteFlow={userHasPermissionToWriteFlow}
+                    userHasPermissionToWriteTable={
+                      userHasPermissionToWriteTable
+                    }
+                    userHasPermissionToWriteFolder={
+                      userHasPermissionToWriteFolder
+                    }
                     userHasPermissionToWriteAgent={
                       userHasPermissionToWriteAgent
                     }

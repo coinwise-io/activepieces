@@ -1,5 +1,6 @@
 import { CreateStepRunRequestBody, GetSampleDataRequest, PrincipalType, SERVICE_KEY_SECURITY_OPENAPI } from '@activepieces/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
 import { flowService } from '../flow/flow.service'
@@ -9,6 +10,13 @@ import { sampleDataService } from './sample-data.service'
 export const sampleDataController: FastifyPluginAsyncZod = async (fastify) => {
 
     fastify.post('/test-step', TestSampleDataRequestBody, async (request) => {
+        const guard = accessGuard(request.log)
+        await guard.assertFlowByVersionId({
+            access: await guard.forRequest({ request }),
+            projectId: request.projectId,
+            flowVersionId: request.body.flowVersionId,
+            capability: 'EDIT',
+        })
         return flowRunService(request.log).test({
             projectId: request.projectId,
             flowVersionId: request.body.flowVersionId,
@@ -18,6 +26,13 @@ export const sampleDataController: FastifyPluginAsyncZod = async (fastify) => {
     })
 
     fastify.get('/', GetSampleDataRequestParams, async (request) => {
+        const guard = accessGuard(request.log)
+        await guard.assertFlowById({
+            access: await guard.forRequest({ request }),
+            projectId: request.projectId,
+            flowId: request.query.flowId,
+            capability: 'READ_RUNS',
+        })
         const flow = await flowService(request.log).getOnePopulatedOrThrow({
             id: request.query.flowId,
             projectId: request.projectId,
