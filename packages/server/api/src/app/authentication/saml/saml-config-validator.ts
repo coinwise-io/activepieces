@@ -27,13 +27,16 @@ function extractIdpDescriptor({ idpMetadata }: ExtractIdpDescriptorParams): IdpD
     if (typeof entityId !== 'string' || entityId.length === 0) {
         throw invalidConfig({ message: 'The identity provider metadata has no entityID' })
     }
-    const redirectService = metadata.getSingleSignOnService('redirect')
-    if (typeof redirectService !== 'string' || redirectService.length === 0) {
-        throw invalidConfig({ message: 'The identity provider metadata has no HTTP-Redirect single sign-on service' })
+    const singleSignOn = SUPPORTED_SSO_BINDINGS
+        .map((binding) => ({ binding, url: metadata.getSingleSignOnService(binding) }))
+        .find((service): service is { binding: SsoBinding, url: string } => typeof service.url === 'string' && service.url.length > 0)
+    if (isNil(singleSignOn)) {
+        throw invalidConfig({ message: 'The identity provider metadata has no HTTP-Redirect or HTTP-POST single sign-on service' })
     }
     return {
         entityId,
-        singleSignOnUrl: redirectService,
+        singleSignOnUrl: singleSignOn.url,
+        singleSignOnBinding: singleSignOn.binding,
         wantsSignedRequests: metadata.isWantAuthnRequestsSigned(),
     }
 }
@@ -127,15 +130,19 @@ const METADATA_FETCH_TIMEOUT_MS = 10_000
 const METADATA_MAX_BYTES = 1024 * 1024
 const METADATA_MAX_REDIRECTS = 3
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+=*$/
+const SUPPORTED_SSO_BINDINGS: SsoBinding[] = ['redirect', 'post']
 
 export const samlConfigValidator = {
     normalize,
     extractIdpDescriptor,
 }
 
+export type SsoBinding = 'redirect' | 'post'
+
 export type IdpDescriptor = {
     entityId: string
     singleSignOnUrl: string
+    singleSignOnBinding: SsoBinding
     wantsSignedRequests: boolean
 }
 

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { isNil, tryCatch } from '@activepieces/core-utils'
 import { AuthenticationResponse, ClaimSamlLoginRequest, PrincipalType } from '@activepieces/shared'
 import { FastifyBaseLogger, FastifyReply, FastifyRequest } from 'fastify'
@@ -19,12 +20,21 @@ export const samlController: FastifyPluginAsyncZod = async (app) => {
         if (isNil(platformId)) {
             return redirectToSignIn({ reply, log: request.log, reason: 'No platform resolved for SAML login' })
         }
-        const { data: login, error } = await tryCatch(() => samlService(request.log).buildLoginUrl({ platformId }))
+        const { data: login, error } = await tryCatch(() => samlService(request.log).startLogin({ platformId }))
         if (!isNil(error) || isNil(login)) {
             return redirectToSignIn({ reply, log: request.log, reason: 'Failed to build SAML login request', error })
         }
         void reply.header('Set-Cookie', nonceCookie({ nonce: login.nonce, maxAgeSeconds: NONCE_COOKIE_MAX_AGE_SECONDS }))
-        return reply.redirect(login.loginUrl, 302)
+        if (login.binding === 'redirect') {
+            return reply.redirect(login.loginUrl, 302)
+        }
+        const scriptNonce = randomBytes(16).toString('base64')
+        return reply
+            .type('text/html')
+            .header('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${scriptNonce}'; base-uri 'none'; frame-ancestors 'none'`)
+            .header('Cache-Control', 'no-store')
+            .header('X-Content-Type-Options', 'nosniff')
+            .send(autoPostPage({ actionUrl: login.actionUrl, samlRequest: login.samlRequest, relayState: login.relayState, scriptNonce }))
     })
 
     app.post('/acs', AcsRequestOptions, async (request, reply) => {
@@ -72,6 +82,28 @@ export const samlController: FastifyPluginAsyncZod = async (app) => {
             ip: clientIp(request),
         })
     })
+}
+
+function autoPostPage({ actionUrl, samlRequest, relayState, scriptNonce }: AutoPostPageParams): string {
+    return `<!doctype html>
+<html><head><meta charset="utf-8"><title>Signing in</title></head>
+<body>
+<form method="post" action="${escapeHtml({ value: actionUrl })}">
+<input type="hidden" name="SAMLRequest" value="${escapeHtml({ value: samlRequest })}">
+<input type="hidden" name="RelayState" value="${escapeHtml({ value: relayState })}">
+<noscript><button type="submit">Continue</button></noscript>
+</form>
+<script nonce="${scriptNonce}">document.forms[0].submit()</script>
+</body></html>`
+}
+
+function escapeHtml({ value }: { value: string }): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
 }
 
 function redirectToSignIn({ reply, log, reason, error }: RedirectToSignInParams) {
@@ -171,6 +203,13 @@ const VerifySsoDomainRequestOptions = {
     config: {
         security: securityAccess.platformAdminOnly([PrincipalType.USER]),
     },
+}
+
+type AutoPostPageParams = {
+    actionUrl: string
+    samlRequest: string
+    relayState: string
+    scriptNonce: string
 }
 
 type RedirectToSignInParams = {

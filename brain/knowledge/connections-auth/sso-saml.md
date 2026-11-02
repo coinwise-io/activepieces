@@ -10,7 +10,7 @@ SP-initiated SAML 2.0 sign-in against the company IdP, tested with JumpCloud. Th
 **Login code** — a one-time, 60 s Redis code that the ACS hands to `/authenticate?code=`. The frontend exchanges it at `/v1/authn/saml/claim`, so no JWT ever sits in a URL.
 
 ### Flow
-1. **`GET /v1/authn/saml/login`** stores the AuthnRequest id and a browser nonce in Redis, and sets the `ap_saml_nonce` cookie.
+1. **`GET /v1/authn/saml/login`** stores the AuthnRequest id and a browser nonce in Redis, and sets the `ap_saml_nonce` cookie. It redirects when the IdP metadata offers HTTP-Redirect, otherwise it serves a self-submitting HTTP-POST form (JumpCloud metadata only offers POST).
 2. **`POST /v1/authn/saml/acs`:**
    - verifies the signature against the stored certificate only;
    - checks InResponseTo, Destination, the audience (`Activepieces`), and that the assertion has not been replayed;

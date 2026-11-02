@@ -5,18 +5,25 @@ import * as samlify from 'samlify'
 import { domainHelper } from '../../helper/domain-helper'
 import { platformService } from '../../platform/platform.service'
 import { authenticationService } from '../authentication.service'
-import { samlConfigValidator } from './saml-config-validator'
+import { samlConfigValidator, SsoBinding } from './saml-config-validator'
 import { samlLoginCodeStore } from './saml-login-code-store'
 import { samlRequestStore } from './saml-request-store'
 import { samlSetup } from './saml-setup'
 
 export const samlService = (log: FastifyBaseLogger) => ({
-    async buildLoginUrl({ platformId }: BuildLoginUrlParams): Promise<LoginRedirect> {
+    async startLogin({ platformId }: BuildLoginUrlParams): Promise<SamlLoginStart> {
         const config = await getSamlConfigOrThrow({ platformId, log })
-        const { sp, idp } = await buildEntities({ config })
-        const context = sp.createLoginRequest(idp, 'redirect', { relayState: platformId })
-        const nonce = await samlRequestStore.record({ requestId: context.id, platformId })
-        return { loginUrl: context.context, nonce }
+        const { sp, idp, binding } = await buildEntities({ config })
+        const request = sp.createLoginRequest(idp, binding, { relayState: platformId })
+        const nonce = await samlRequestStore.record({ requestId: request.id, platformId })
+        if (binding === 'redirect') {
+            return { binding, loginUrl: request.context, nonce }
+        }
+        const actionUrl = 'entityEndpoint' in request ? request.entityEndpoint : undefined
+        if (typeof actionUrl !== 'string' || actionUrl.length === 0) {
+            throw new Error('SAML POST login request has no IdP endpoint')
+        }
+        return { binding, actionUrl, samlRequest: request.context, relayState: platformId, nonce }
     },
 
     async completeLogin({ platformId, samlResponse }: CompleteLoginParams): Promise<string> {
@@ -88,7 +95,7 @@ async function buildEntities({ config }: BuildEntitiesParams): Promise<Entities>
         wantAuthnRequestsSigned: false,
         nameIDFormat: [NAME_ID_FORMAT],
         singleSignOnService: [{
-            Binding: samlify.Constants.namespace.binding.redirect,
+            Binding: samlify.Constants.namespace.binding[descriptor.singleSignOnBinding],
             Location: descriptor.singleSignOnUrl,
         }],
     })
@@ -104,7 +111,7 @@ async function buildEntities({ config }: BuildEntitiesParams): Promise<Entities>
         }],
         clockDrifts: [-CLOCK_DRIFT_MS, CLOCK_DRIFT_MS],
     })
-    return { sp, idp }
+    return { sp, idp, binding: descriptor.singleSignOnBinding }
 }
 
 function readProfile({ extract, attributeMapping }: ReadProfileParams): SamlProfile | null {
@@ -232,10 +239,9 @@ type AssertionDetails = {
     notOnOrAfter: string | null
 }
 
-type LoginRedirect = {
-    loginUrl: string
-    nonce: string
-}
+export type SamlLoginStart =
+    | { binding: 'redirect', loginUrl: string, nonce: string }
+    | { binding: 'post', actionUrl: string, samlRequest: string, relayState: string, nonce: string }
 
 type NameIdAsEmailParams = {
     nameId: ParsedExtract[string]
@@ -270,6 +276,7 @@ type ParsedExtract = Awaited<ReturnType<samlify.ServiceProviderInstance['parseLo
 type Entities = {
     sp: samlify.ServiceProviderInstance
     idp: samlify.IdentityProviderInstance
+    binding: SsoBinding
 }
 
 type SamlProfile = {

@@ -128,6 +128,36 @@ describe('SAML ACS', () => {
         expect(second.statusCode).toBe(StatusCodes.UNAUTHORIZED)
     })
 
+    it('posts the login request to an IdP whose metadata only offers HTTP-POST, then signs in', async () => {
+        const ctx = await createTestContext(app, { platform: { emailAuthEnabled: true } })
+        const saved = await saveSaml({ ctx, idpMetadata: buildIdpMetadata({ binding: 'post' }), idpCertificate: '' })
+        expect(saved.statusCode).toBe(StatusCodes.OK)
+        await setSsoDomain({ platformId: ctx.platform.id, domain: 'example.com', status: 'VERIFIED' })
+
+        const login = await app.inject({ method: 'GET', url: '/api/v1/authn/saml/login', query: { platformId: ctx.platform.id } })
+        expect(login.statusCode).toBe(StatusCodes.OK)
+        expect(login.headers['content-type']).toContain('text/html')
+        const csp = String(login.headers['content-security-policy'])
+        const scriptNonce = /'nonce-([^']+)'/.exec(csp)?.[1]
+        expect(scriptNonce).toBeTruthy()
+        expect(login.body).toContain(`<script nonce="${scriptNonce}">`)
+        expect(login.body).toContain(`action="${IDP_SSO_URL}"`)
+        expect(login.body).toContain(`name="RelayState" value="${ctx.platform.id}"`)
+
+        const encodedRequest = /name="SAMLRequest" value="([^"]+)"/.exec(login.body)?.[1] as string
+        const requestXml = Buffer.from(encodedRequest, 'base64').toString('utf8')
+        const requestId = /ID="([^"]+)"/.exec(requestXml)?.[1] as string
+        const nonce = /ap_saml_nonce=([^;]+)/.exec(String(login.headers['set-cookie']))?.[1] as string
+        const samlResponse = await buildSamlResponse({ email: ctx.userIdentity.email, inResponseTo: requestId })
+
+        const acs = await postAcs({ samlResponse, relayState: ctx.platform.id })
+        expect(acs.statusCode).toBe(StatusCodes.MOVED_TEMPORARILY)
+        const code = new URL(acs.headers.location as string).searchParams.get('code')
+        const claimed = await claim({ code, nonce })
+        expect(claimed.statusCode).toBe(StatusCodes.OK)
+        expect(claimed.json().email).toBe(ctx.userIdentity.email)
+    })
+
     it('rejects a claim without the nonce cookie', async () => {
         const ctx = await createSamlPlatform()
         const { samlResponse } = await startLoginAndRespond({ ctx })
@@ -376,11 +406,11 @@ function certificateBody({ pem }: { pem: string }): string {
     return pem.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s+/g, '')
 }
 
-function buildIdpMetadata(): string {
+function buildIdpMetadata({ binding = 'redirect' }: { binding?: 'redirect' | 'post' } = {}): string {
     return samlify.IdentityProvider({
         entityID: IDP_ENTITY_ID,
         signingCert: IDP_CERT,
-        singleSignOnService: [{ Binding: samlify.Constants.namespace.binding.redirect, Location: IDP_SSO_URL }],
+        singleSignOnService: [{ Binding: samlify.Constants.namespace.binding[binding], Location: IDP_SSO_URL }],
     }).getMetadata()
 }
 
