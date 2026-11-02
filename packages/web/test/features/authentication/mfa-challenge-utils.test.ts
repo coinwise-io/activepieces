@@ -1,12 +1,25 @@
 import { ErrorCode } from '@activepieces/core-utils';
+import {
+  AuthenticationResponse,
+  PlatformRole,
+  UserStatus,
+} from '@activepieces/shared';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
 import { mfaChallengeUtils } from '@/features/authentication/utils/mfa-challenge-utils';
 
-const authentication = {
+const authentication: AuthenticationResponse = {
   id: 'user-1',
   platformId: 'platform-1',
+  platformRole: PlatformRole.ADMIN,
+  status: UserStatus.ACTIVE,
+  externalId: null,
+  email: 'owner@example.com',
+  firstName: 'Owner',
+  lastName: 'User',
+  trackEvents: false,
+  newsLetter: false,
   projectId: 'project-1',
   token: 'jwt',
   verified: true,
