@@ -181,6 +181,21 @@ describe('SCIM Groups', () => {
         expect(await databaseConnection().getRepository('user_group_member').countBy({ groupId: group.id })).toBe(0)
     })
 
+    it.each(['application/json', 'application/scim+json'])('deletes a group when the client sends content-type %s without a body', async (contentType) => {
+        const { ctx } = await setup()
+        const token = await scimTestUtils.createToken(ctx)
+        const scim = scimTestUtils.scimClient({ app, token })
+        const group = await createGroup({ scim, displayName: `Empty body ${contentType}` })
+
+        const deleted = await app.inject({
+            method: 'DELETE',
+            url: `/api/v1/scim/v2/Groups/${group.id}`,
+            headers: { authorization: `Bearer ${token}`, 'content-type': contentType },
+        })
+
+        expect(deleted.statusCode).toBe(StatusCodes.NO_CONTENT)
+    })
+
     it('does not expose groups across platforms', async () => {
         const first = await setup()
         const second = await setup()

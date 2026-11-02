@@ -1,6 +1,6 @@
 import { isNil } from '@activepieces/core-utils'
 import { ScimResourceId } from '@activepieces/shared'
-import { FastifyInstance, FastifyRequest } from 'fastify'
+import { FastifyBodyParser, FastifyInstance, FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
@@ -154,7 +154,15 @@ export const scimController: FastifyPluginAsyncZod = async (app) => {
 
 function registerScimContentTypeParser({ app }: { app: FastifyInstance }): void {
     const parseJson = app.getDefaultJsonParser('error', 'error')
-    app.addContentTypeParser('application/scim+json', { parseAs: 'string' }, parseJson)
+    const parseJsonAllowingEmptyBody: FastifyBodyParser<string> = (request, body, done) => {
+        if (body.trim() === '') {
+            done(null, undefined)
+            return
+        }
+        return parseJson(request, body, done)
+    }
+    app.removeContentTypeParser('application/json')
+    app.addContentTypeParser(['application/json', 'application/scim+json'], { parseAs: 'string' }, parseJsonAllowingEmptyBody)
 }
 
 function platformIdOf({ request }: { request: FastifyRequest }): string {
