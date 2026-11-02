@@ -2027,11 +2027,9 @@
   "Single sign-on URL": "Single sign-on URL",
   "Audience URI (SP Entity ID)": "Audience URI (SP Entity ID)",
   "Paste these from your identity provider": "Paste these from your identity provider",
-  "To change the connection, paste both values again.": "To change the connection, paste both values again.",
   "IDP Metadata": "IDP Metadata",
   "Saved. Paste new metadata to replace it.": "Saved. Paste new metadata to replace it.",
   "Paste the metadata XML contents or the metadata URL provided by your identity provider.": "Paste the metadata XML contents or the metadata URL provided by your identity provider.",
-  "IDP Certificate": "IDP Certificate",
   "Saved. Paste a new certificate to replace it.": "Saved. Paste a new certificate to replace it.",
   "Verify your domain before saving. You can already copy the values above into your identity provider.": "Verify your domain before saving. You can already copy the values above into your identity provider.",
   "Google authentication updated": "Google authentication updated",
@@ -3769,5 +3767,8 @@
   "Two-factor authentication was reset": "Two-factor authentication was reset",
   "2FA": "2FA",
   "Reset two-factor": "Reset two-factor",
-  "This user will lose their authenticator app and recovery codes. They will be asked to set up two-factor authentication again if it is required.": "This user will lose their authenticator app and recovery codes. They will be asked to set up two-factor authentication again if it is required."
+  "This user will lose their authenticator app and recovery codes. They will be asked to set up two-factor authentication again if it is required.": "This user will lose their authenticator app and recovery codes. They will be asked to set up two-factor authentication again if it is required.",
+  "IDP Certificate (optional)": "IDP Certificate (optional)",
+  "Leave empty to use the signing certificate from the metadata.": "Leave empty to use the signing certificate from the metadata.",
+  "To change the connection, paste the metadata again.": "To change the connection, paste the metadata again."
 }

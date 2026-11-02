@@ -388,7 +388,7 @@ const SamlStep = ({
             title={t('Paste these from your identity provider')}
             description={
               connected
-                ? t('To change the connection, paste both values again.')
+                ? t('To change the connection, paste the metadata again.')
                 : undefined
             }
             divided={!!samlAcs}
@@ -423,11 +423,10 @@ const SamlStep = ({
               name="idpCertificate"
               render={({ field }) => (
                 <FormItem className="grid space-y-2">
-                  <FormLabel>{t('IDP Certificate')}</FormLabel>
+                  <FormLabel>{t('IDP Certificate (optional)')}</FormLabel>
                   <FormControl>
                     <Textarea
                       {...field}
-                      required
                       placeholder={
                         connected
                           ? t('Saved. Paste a new certificate to replace it.')
@@ -435,6 +434,11 @@ const SamlStep = ({
                       }
                     />
                   </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Leave empty to use the signing certificate from the metadata.',
+                    )}
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -499,7 +503,7 @@ const SAML_ENTITY_ID = 'Activepieces';
 
 const Saml2FormValues = z.object({
   idpMetadata: z.string().min(1, formErrors.required),
-  idpCertificate: z.string().min(1, formErrors.required),
+  idpCertificate: z.string(),
 });
 type Saml2FormValues = z.infer<typeof Saml2FormValues>;
 

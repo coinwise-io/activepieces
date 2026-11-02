@@ -62,6 +62,21 @@ describe('SAML configuration', () => {
         expect(stored.federatedAuthProviders.saml?.idpCertificate).toContain('-----BEGIN CERTIFICATE-----')
     })
 
+    it('pins the signing certificate from the metadata when no certificate is pasted', async () => {
+        const ctx = await createTestContext(app)
+        const response = await saveSaml({ ctx, idpMetadata: buildIdpMetadata(), idpCertificate: '' })
+        expect(response.statusCode).toBe(StatusCodes.OK)
+        const stored = await platformService(app.log).getOneWithFederatedAuthOrThrow(ctx.platform.id)
+        expect(certificateBody({ pem: stored.federatedAuthProviders.saml?.idpCertificate ?? '' })).toBe(certificateBody({ pem: IDP_CERT }))
+    })
+
+    it('refuses an empty certificate when the metadata has no signing certificate', async () => {
+        const ctx = await createTestContext(app)
+        const metadataWithoutCertificate = `<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${IDP_ENTITY_ID}"><IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol"><SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${IDP_SSO_URL}"/></IDPSSODescriptor></EntityDescriptor>`
+        const response = await saveSaml({ ctx, idpMetadata: metadataWithoutCertificate, idpCertificate: '' })
+        expect(response.statusCode).toBe(StatusCodes.BAD_REQUEST)
+    })
+
     it('clears the configuration when saml is null', async () => {
         const ctx = await createSamlPlatform()
         const response = await ctx.post(`/v1/platforms/${ctx.platform.id}`, { federatedAuthProviders: { saml: null } })
@@ -355,6 +370,10 @@ async function saveSaml({ ctx, idpMetadata, idpCertificate }: SaveSamlParams) {
     return ctx.post(`/v1/platforms/${ctx.platform.id}`, {
         federatedAuthProviders: { saml: { idpMetadata, idpCertificate } },
     })
+}
+
+function certificateBody({ pem }: { pem: string }): string {
+    return pem.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s+/g, '')
 }
 
 function buildIdpMetadata(): string {

@@ -7,7 +7,10 @@ import * as samlify from 'samlify'
 async function normalize({ config }: NormalizeParams): Promise<SAMLAuthnProviderConfig> {
     const idpMetadata = await resolveMetadata({ rawMetadata: config.idpMetadata })
     assertIdpMetadataIsUsable({ idpMetadata })
-    const idpCertificate = normalizeCertificate({ rawCertificate: config.idpCertificate })
+    const rawCertificate = config.idpCertificate.trim().length > 0
+        ? config.idpCertificate
+        : signingCertificateFromMetadata({ idpMetadata })
+    const idpCertificate = normalizeCertificate({ rawCertificate })
     return {
         ...config,
         idpMetadata,
@@ -33,6 +36,21 @@ function extractIdpDescriptor({ idpMetadata }: ExtractIdpDescriptorParams): IdpD
         singleSignOnUrl: redirectService,
         wantsSignedRequests: metadata.isWantAuthnRequestsSigned(),
     }
+}
+
+function signingCertificateFromMetadata({ idpMetadata }: ExtractIdpDescriptorParams): string {
+    const declared = samlify.IdPMetadata(idpMetadata).getX509Certificate('signing')
+    const certificates = [...new Set((Array.isArray(declared) ? declared : [declared])
+        .filter((certificate): certificate is string => typeof certificate === 'string')
+        .map((certificate) => certificate.replace(/\s+/g, ''))
+        .filter((certificate) => certificate.length > 0))]
+    if (certificates.length === 0) {
+        throw invalidConfig({ message: 'The identity provider metadata has no signing certificate, paste the certificate instead' })
+    }
+    if (certificates.length > 1) {
+        throw invalidConfig({ message: 'The identity provider metadata lists more than one signing certificate, paste the one to trust' })
+    }
+    return certificates[0]
 }
 
 function assertIdpMetadataIsUsable({ idpMetadata }: ExtractIdpDescriptorParams): void {
