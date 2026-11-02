@@ -5,6 +5,7 @@ import {
   MoreVertical,
   Pencil,
   RotateCcw,
+  ShieldOff,
   Trash,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -29,6 +30,9 @@ type UserActionsProps = {
   onDelete: (id: string, isInvitation: boolean) => void;
   onToggleStatus: (userId: string, currentStatus: UserStatus) => void;
   onUpdate: () => void;
+  hasTwoFactor: boolean;
+  isCurrentUser: boolean;
+  onResetTwoFactor: (userId: string) => Promise<void>;
 };
 
 export const UserActions = ({
@@ -37,6 +41,9 @@ export const UserActions = ({
   onDelete,
   onToggleStatus,
   onUpdate,
+  hasTwoFactor,
+  isCurrentUser,
+  onResetTwoFactor,
 }: UserActionsProps) => {
   const [open, setOpen] = useState(false);
   const isInvitation = row.type === 'invitation';
@@ -91,6 +98,22 @@ export const UserActions = ({
               )}
               {isActive ? t('Deactivate') : t('Activate')}
             </DropdownMenuItem>
+          )}
+          {!isInvitation && hasTwoFactor && !isCurrentUser && (
+            <ConfirmationDeleteDialog
+              title={t('Reset two-factor')}
+              message={t(
+                'This user will lose their authenticator app and recovery codes. They will be asked to set up two-factor authentication again if it is required.',
+              )}
+              entityName={row.data.email}
+              buttonText={t('Reset')}
+              mutationFn={() => onResetTwoFactor(row.data.id)}
+            >
+              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                <ShieldOff className="h-4 w-4" />
+                {t('Reset two-factor')}
+              </DropdownMenuItem>
+            </ConfirmationDeleteDialog>
           )}
           <ConfirmationDeleteDialog
             title={isInvitation ? t('Delete Invitation') : t('Delete User')}

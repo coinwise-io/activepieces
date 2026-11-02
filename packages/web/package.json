@@ -81,6 +81,7 @@
     "papaparse": "5.5.3",
     "posthog-js": "1.393.5",
     "pretty-bytes": "7.1.0",
+    "qrcode.react": "4.2.0",
     "qs": "6.15.2",
     "radix-ui": "1.4.3",
     "react": "19",

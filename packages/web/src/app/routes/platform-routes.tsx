@@ -101,6 +101,9 @@ const PlatformTemplatesPage = React.lazy(() =>
   })),
 );
 const UsersPage = React.lazy(() => import('./platform/users'));
+const GroupsPage = React.lazy(() =>
+  import('./platform/users/groups').then((m) => ({ default: m.GroupsPage })),
+);
 const PlatformConnectionsPage = React.lazy(
   () => import('./platform/connections'),
 );
@@ -492,6 +495,20 @@ export const platformRoutes = [
           <PlanFeatureGuard feature="sso">
             <SuspenseWrapper>
               <SamlSetupPage />
+            </SuspenseWrapper>
+          </PlanFeatureGuard>
+        </PageTitle>
+      </PlatformLayout>
+    ),
+  },
+  {
+    path: '/platform/users/groups',
+    element: (
+      <PlatformLayout>
+        <PageTitle title="Groups">
+          <PlanFeatureGuard feature="scim">
+            <SuspenseWrapper>
+              <GroupsPage />
             </SuspenseWrapper>
           </PlanFeatureGuard>
         </PageTitle>

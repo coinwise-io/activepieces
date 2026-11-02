@@ -19,7 +19,9 @@ import { platformAnalyticsModule } from './analytics/platform-analytics.module'
 import { appConnectionModule } from './app-connection/app-connection.module'
 import { platformAppConnectionModule } from './app-connection/platform-app-connection.module'
 import { authenticationModule } from './authentication/authentication.module'
+import { mfaModule } from './authentication/mfa/mfa.module'
 import { otpModule } from './authentication/otp/otp-module'
+import { samlModule } from './authentication/saml/saml.module'
 import { canaryRoutingMiddleware } from './core/canary/canary-routing.middleware'
 import { collaborativeModule } from './core/collaborative/collaborative.module'
 import { oidcModule } from './core/security/oidc/oidc.module'
@@ -47,6 +49,7 @@ import { SystemJobBackoff, systemJobsSchedule } from './helper/system-jobs/syste
 import { systemSnapshot } from './helper/system-snapshot'
 import { validateEnvPropsOnStartup } from './helper/system-validator'
 import { shutdownTelemetry } from './helper/telemetry.utils'
+import { identityProvisioningModule } from './identity-provisioning/identity-provisioning.module'
 import { knowledgeBaseModule } from './knowledge-base/knowledge-base.module'
 import { mcpActivityController } from './mcp/activity/mcp-activity-controller'
 import { mcpServerModule } from './mcp/mcp-module'
@@ -196,6 +199,8 @@ export const setupApp = async (app: FastifyInstance): Promise<FastifyInstance> =
     await app.register(openapiModule)
     await app.register(appEventRoutingModule)
     await app.register(authenticationModule)
+    await app.register(samlModule)
+    await app.register(mfaModule)
     await app.register(triggerModule)
     await app.register(platformModule)
     await app.register(piecesReportModule)
@@ -218,6 +223,7 @@ export const setupApp = async (app: FastifyInstance): Promise<FastifyInstance> =
     await app.register(knowledgeBaseModule)
     await app.register(templateModule)
     await app.register(platformAnalyticsModule)
+    await app.register(identityProvisioningModule)
 
     // Dev-only: accept browser debug logs into the shared evlog fs drain so a
     // chat run can be reconstructed end-to-end (web + api + worker). Never in cloud/prod.

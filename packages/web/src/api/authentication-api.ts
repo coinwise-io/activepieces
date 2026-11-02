@@ -7,9 +7,11 @@ import {
   ResetPasswordRequestBody,
   VerifyEmailRequestBody,
   AuthenticationResponse,
+  ClaimSamlLoginRequest,
   ClaimTokenRequest,
   FederatedAuthnLoginResponse,
   SignInRequest,
+  SignInResponse,
   SignUpRequest,
   SwitchPlatformRequest,
   ThirdPartyAuthnProviderEnum,
@@ -21,16 +23,10 @@ import { api } from '@/lib/api';
 
 export const authenticationApi = {
   signIn(request: SignInRequest) {
-    return api.post<AuthenticationResponse>(
-      '/v1/authentication/sign-in',
-      request,
-    );
+    return api.post<SignInResponse>('/v1/authentication/sign-in', request);
   },
   signUp(request: SignUpRequest) {
-    return api.post<AuthenticationResponse>(
-      '/v1/authentication/sign-up',
-      request,
-    );
+    return api.post<SignInResponse>('/v1/authentication/sign-up', request);
   },
   getFederatedAuthLoginUrl(providerName: ThirdPartyAuthnProviderEnum) {
     return api.get<FederatedAuthnLoginResponse>(`/v1/authn/federated/login`, {
@@ -46,6 +42,9 @@ export const authenticationApi = {
       request,
     );
   },
+  claimSamlLogin(request: ClaimSamlLoginRequest) {
+    return api.post<AuthenticationResponse>('/v1/authn/saml/claim', request);
+  },
   requestEmailCode(request: RequestEmailCodeRequest) {
     return api.post<void>('/v1/authentication/otp/request', request);
   },
@@ -56,10 +55,7 @@ export const authenticationApi = {
     );
   },
   verifyEmailCode(request: VerifyEmailCodeRequest) {
-    return api.post<AuthenticationResponse>(
-      '/v1/authentication/otp/verify',
-      request,
-    );
+    return api.post<SignInResponse>('/v1/authentication/otp/verify', request);
   },
   sendOtpEmail(request: CreateOtpRequestBody) {
     return api.post<void>('/v1/otp', request);

@@ -51,6 +51,16 @@ const PLAN_FEATURE_SAMPLES: Record<PlanFeature, PlanFeatureSampleSpec> = {
       tier: 'team',
     },
   },
+  scim: {
+    isLocked: (plan) => !plan.scimEnabled,
+    teaser: {
+      featureKey: 'SSO',
+      title: 'Enable SCIM provisioning',
+      description:
+        'Provision users and groups automatically from your identity provider',
+      tier: 'team',
+    },
+  },
   projectRoles: {
     isLocked: (plan) => !plan.projectRolesEnabled,
     teaser: {
@@ -143,6 +153,7 @@ const PLAN_FEATURE_SAMPLES: Record<PlanFeature, PlanFeatureSampleSpec> = {
 
 type PlanFeature =
   | 'sso'
+  | 'scim'
   | 'projectRoles'
   | 'globalConnections'
   | 'templates'

@@ -35,6 +35,8 @@ export type ApErrorParams =
     | InvalidCredentialsErrorParams
     | InvalidJwtTokenErrorParams
     | InvalidOtpParams
+    | MfaChallengeExpiredParams
+    | MfaRequiredParams
     | InvalidSAMLResponseParams
     | InvitationOnlySignUpParams
     | JobRemovalFailureErrorParams
@@ -479,6 +481,10 @@ ErrorCode.EXISTING_ALERT_CHANNEL,
 
 export type InvalidOtpParams = BaseErrorParams<ErrorCode.INVALID_OTP, Record<string, never>>
 
+export type MfaChallengeExpiredParams = BaseErrorParams<ErrorCode.MFA_CHALLENGE_EXPIRED, Record<string, never>>
+
+export type MfaRequiredParams = BaseErrorParams<ErrorCode.MFA_REQUIRED, Record<string, never>>
+
 export type InvalidLicenseKeyParams = BaseErrorParams<ErrorCode.INVALID_LICENSE_KEY, {
     key: string
 }>
@@ -627,6 +633,8 @@ export enum ErrorCode {
     INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
     INVALID_OR_EXPIRED_JWT_TOKEN = 'INVALID_OR_EXPIRED_JWT_TOKEN',
     INVALID_OTP = 'INVALID_OTP',
+    MFA_CHALLENGE_EXPIRED = 'MFA_CHALLENGE_EXPIRED',
+    MFA_REQUIRED = 'MFA_REQUIRED',
     INVALID_SAML_RESPONSE = 'INVALID_SAML_RESPONSE',
     INVITATION_ONLY_SIGN_UP = 'INVITATION_ONLY_SIGN_UP',
     JOB_REMOVAL_FAILURE = 'JOB_REMOVAL_FAILURE',

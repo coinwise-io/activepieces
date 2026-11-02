@@ -14,11 +14,11 @@ afterAll(async () => {
 })
 
 describe('Last sign-in method guard on CE', () => {
-    it('allows turning email off, because CE always counts email as working', async () => {
+    it('refuses turning email off when it is the only working sign-in method', async () => {
         const ctx = await createTestContext(app, { platform: { emailAuthEnabled: true, googleAuthEnabled: false } })
 
         const response = await ctx.post(`/v1/platforms/${ctx.platform.id}`, { emailAuthEnabled: false })
 
-        expect(response.statusCode).toBe(StatusCodes.OK)
+        expect(response.statusCode).toBe(StatusCodes.CONFLICT)
     })
 })

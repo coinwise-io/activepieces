@@ -20,6 +20,7 @@ import { userHooks, userMutations } from '@/hooks/user-hooks';
 
 import { LanguageToggle } from './language-toggle';
 import { ThemeToggle } from './theme-toggle';
+import { TwoFactorSection } from './two-factor-section';
 
 export function AccountSettingsDialog({
   open,
@@ -120,6 +121,7 @@ export function AccountSettingsDialog({
         <div className="flex flex-col divide-y divide-gray-6 rounded-xl border border-gray-6">
           <ThemeToggle />
           <LanguageToggle />
+          <TwoFactorSection />
         </div>
       </DialogContent>
     </Dialog>

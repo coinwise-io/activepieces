@@ -10,6 +10,7 @@ import {
   Info,
   Mail,
   Hash,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { StatusDot } from '@/app/components/admin';
@@ -30,7 +31,11 @@ type ColumnDefWithAccessorKey = ColumnDef<RowDataWithActions<UserRowData>> & {
   accessorKey: string;
 };
 
-export const createUsersTableColumns = (): ColumnDefWithAccessorKey[] => [
+export const createUsersTableColumns = ({
+  twoFactorUserIds,
+}: {
+  twoFactorUserIds: ReadonlySet<string>;
+}): ColumnDefWithAccessorKey[] => [
   {
     accessorKey: 'identity',
     size: 260,
@@ -188,6 +193,27 @@ export const createUsersTableColumns = (): ColumnDefWithAccessorKey[] => [
         <StatusDot tone="success">{t('Activated')}</StatusDot>
       ) : (
         <StatusDot tone="neutral">{t('Deactivated')}</StatusDot>
+      );
+    },
+  },
+  {
+    accessorKey: 'twoFactor',
+    size: 80,
+    header: ({ column }) => (
+      <DataTableColumnHeader
+        column={column}
+        title={t('2FA')}
+        icon={ShieldCheck}
+      />
+    ),
+    cell: ({ row }) => {
+      if (row.original.type === 'invitation') {
+        return <div className="text-gray-11">-</div>;
+      }
+      return twoFactorUserIds.has(row.original.id) ? (
+        <StatusDot tone="success">{t('On')}</StatusDot>
+      ) : (
+        <StatusDot tone="neutral">{t('Off')}</StatusDot>
       );
     },
   },

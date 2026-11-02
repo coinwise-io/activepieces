@@ -9,6 +9,7 @@ import { PlatformModelTierEntity } from '../ai/platform-model-tier-entity'
 import { AiUsage5mEntity, AiUsageCopyCursorEntity, AiUsageDailyEntity, AiUsageRunEntity } from '../ai/usage/ai-usage-entities'
 import { PlatformAnalyticsReportEntity } from '../analytics/platform-analytics-report.entity'
 import { AppConnectionEntity } from '../app-connection/app-connection.entity'
+import { UserMfaEntity } from '../authentication/mfa/user-mfa.entity'
 import { OtpEntity } from '../authentication/otp/otp-entity'
 import { UserIdentityEntity } from '../authentication/user-identity/user-identity-entity'
 import { EventDestinationEntity } from '../event-destinations/event-destinations.entity'
@@ -20,6 +21,9 @@ import { FlowVersionEntity } from '../flows/flow-version/flow-version-entity'
 import { FolderEntity } from '../flows/folder/folder.entity'
 import { system } from '../helper/system/system'
 import { AppSystemProp } from '../helper/system/system-props'
+import { ScimTokenEntity } from '../identity-provisioning/scim-token/scim-token.entity'
+import { UserGroupMemberEntity } from '../identity-provisioning/user-group/user-group-member.entity'
+import { UserGroupEntity } from '../identity-provisioning/user-group/user-group.entity'
 import { KnowledgeBaseChunkEntity } from '../knowledge-base/knowledge-base-chunk.entity'
 import { KnowledgeBaseFileEntity } from '../knowledge-base/knowledge-base-file.entity'
 import { McpActivityEntity } from '../mcp/activity/mcp-activity-entity'
@@ -104,7 +108,10 @@ function getEntities(): EntitySchema<unknown>[] {
         PlatformAnalyticsReportEntity,
         // CLOUD
         EventDestinationEntity,
-
+        ScimTokenEntity,
+        UserGroupEntity,
+        UserGroupMemberEntity,
+        UserMfaEntity,
     ]
 }
 

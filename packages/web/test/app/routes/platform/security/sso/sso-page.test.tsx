@@ -67,6 +67,10 @@ vi.mock('@/features/platform-admin/api/saml-sso-api', () => ({
   samlSsoApi: samlSsoApiMock,
 }));
 
+vi.mock('@/app/routes/platform/security/sso/scim-section', () => ({
+  ScimSection: () => null,
+}));
+
 vi.mock('@/hooks/platform-hooks', () => ({
   platformHooks: {
     useCurrentPlatform: () => ({
@@ -935,7 +939,7 @@ describe('SamlSetupPage', () => {
     fireEvent.change(screen.getByLabelText('IDP Metadata'), {
       target: { value: '<xml />' },
     });
-    fireEvent.change(screen.getByLabelText('IDP Certificate'), {
+    fireEvent.change(screen.getByLabelText('IDP Certificate (optional)'), {
       target: { value: 'cert' },
     });
     await waitFor(() => expect(findButton('Save')?.disabled).toBe(false));
@@ -954,6 +958,32 @@ describe('SamlSetupPage', () => {
     expect(await screen.findByText('authentication page')).toBeDefined();
   });
 
+  it('saves with an empty certificate so the server reads it from the metadata', async () => {
+    setPlatform({
+      id: 'platform-1',
+      ssoDomain: 'acme.com',
+      ssoDomainVerification: verifiedVerification,
+    });
+    mountSetupPage();
+
+    fireEvent.change(screen.getByLabelText('IDP Metadata'), {
+      target: { value: '<xml />' },
+    });
+    await waitFor(() => expect(findButton('Save')?.disabled).toBe(false));
+    click(findButton('Save'));
+
+    await waitFor(() =>
+      expect(platformApiMock.update).toHaveBeenCalledWith(
+        {
+          federatedAuthProviders: {
+            saml: { idpMetadata: '<xml />', idpCertificate: '' },
+          },
+        },
+        'platform-1',
+      ),
+    );
+  });
+
   it('shows the server error when saving the SAML connection fails', async () => {
     platformApiMock.update.mockRejectedValue(
       new Error('SSO domain must be verified before configuring SAML'),
@@ -967,7 +997,7 @@ describe('SamlSetupPage', () => {
     fireEvent.change(screen.getByLabelText('IDP Metadata'), {
       target: { value: '<xml />' },
     });
-    fireEvent.change(screen.getByLabelText('IDP Certificate'), {
+    fireEvent.change(screen.getByLabelText('IDP Certificate (optional)'), {
       target: { value: 'cert' },
     });
     await waitFor(() => expect(findButton('Save')?.disabled).toBe(false));
@@ -1194,14 +1224,14 @@ describe('SamlSetupPage', () => {
     mountSetupPage();
 
     expect(
-      screen.getByText('To change the connection, paste both values again.'),
+      screen.getByText('To change the connection, paste the metadata again.'),
     ).toBeDefined();
 
     expect(
       screen.getByLabelText('IDP Metadata').getAttribute('placeholder'),
     ).toBe('Saved. Paste new metadata to replace it.');
     expect(
-      screen.getByLabelText('IDP Certificate').getAttribute('placeholder'),
+      screen.getByLabelText('IDP Certificate (optional)').getAttribute('placeholder'),
     ).toBe('Saved. Paste a new certificate to replace it.');
   });
 });

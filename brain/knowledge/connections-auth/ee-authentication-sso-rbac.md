@@ -4,6 +4,8 @@ icon: 🛡️
 
 # EE Authentication (SSO/RBAC)
 
+> **Removed from this fork.** The Enterprise code this page describes was deleted, and it must not be used as a reference. The current SAML is described in [[sso-saml]] and the current provisioning in [[scim]].
+
 Enterprise auth layer extending CE with SAML 2.0 SSO, Google/GitHub federated OAuth, OTP email flows, per-project RBAC, and managed-auth JWT exchange for embedding. All SSO paths delegate to `authenticationService.federatedAuthn()` which creates/links a user and issues a standard AP JWT.
 
 ### Entities & services

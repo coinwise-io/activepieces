@@ -5,6 +5,7 @@ import {
   RequestEmailCodeRequest,
   ResetPasswordRequestBody,
   SignInRequest,
+  SignInResponse,
   SignUpRequest,
   UserIdentity,
   VerifyEmailRequestBody,
@@ -20,10 +21,10 @@ export const authMutations = {
     onSuccess,
     onError,
   }: {
-    onSuccess: (data: AuthenticationResponse) => void;
+    onSuccess: (data: SignInResponse) => void;
     onError: (error: HttpError) => void;
   }) => {
-    return useMutation<AuthenticationResponse, HttpError, SignInRequest>({
+    return useMutation<SignInResponse, HttpError, SignInRequest>({
       mutationFn: authenticationApi.signIn,
       onSuccess,
       onError,
@@ -33,10 +34,10 @@ export const authMutations = {
     onSuccess,
     onError,
   }: {
-    onSuccess: (data: AuthenticationResponse) => void;
+    onSuccess: (data: SignInResponse) => void;
     onError: (error: HttpError) => void;
   }) => {
-    return useMutation<AuthenticationResponse, HttpError, SignUpRequest>({
+    return useMutation<SignInResponse, HttpError, SignUpRequest>({
       mutationFn: authenticationApi.signUp,
       onSuccess,
       onError,
@@ -76,14 +77,10 @@ export const authMutations = {
     onSuccess,
     onError,
   }: {
-    onSuccess: (data: AuthenticationResponse) => void;
+    onSuccess: (data: SignInResponse) => void;
     onError: (error: HttpError) => void;
   }) => {
-    return useMutation<
-      AuthenticationResponse,
-      HttpError,
-      VerifyEmailCodeRequest
-    >({
+    return useMutation<SignInResponse, HttpError, VerifyEmailCodeRequest>({
       mutationFn: authenticationApi.verifyEmailCode,
       onSuccess,
       onError,

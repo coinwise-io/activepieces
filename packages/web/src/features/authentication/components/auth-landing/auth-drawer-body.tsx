@@ -1,7 +1,9 @@
 import { ErrorCode, isNil } from '@activepieces/core-utils';
 import {
   ApFlagId,
+  AuthenticationResponse,
   CreateOtpRequestBody,
+  MfaChallengeResponse,
   MAX_FULL_NAME_LENGTH,
   OtpType,
   TelemetryEventName,
@@ -44,8 +46,10 @@ import {
   InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { HorizontalSeparatorWithText } from '@/components/ui/separator';
+import { MfaChallenge } from '@/features/authentication/components/mfa/mfa-challenge';
 import { authMutations } from '@/features/authentication/hooks/auth-hooks';
 import { captchaUtils } from '@/features/authentication/utils/captcha-utils';
+import { mfaChallengeUtils } from '@/features/authentication/utils/mfa-challenge-utils';
 import { flagsHooks } from '@/hooks/flags-hooks';
 import { acquisitionUtils } from '@/lib/acquisition-utils';
 import { HttpError, api } from '@/lib/api';
@@ -823,8 +827,18 @@ function CodeStep({
   const [code, setCode] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
+  const [challenge, setChallenge] = useState<MfaChallengeResponse | null>(null);
   const redirectAfterLogin = useRedirectAfterLogin();
   const { capture } = useTelemetry();
+
+  const completeSignIn = (data: AuthenticationResponse) => {
+    authenticationSession.saveResponse(data, false);
+    if (isNil(data.platformId)) {
+      onNeedsName();
+      return;
+    }
+    redirectAfterLogin();
+  };
 
   useEffect(() => {
     if (cooldown <= 0) {
@@ -836,13 +850,12 @@ function CodeStep({
 
   const { mutate: verify, isPending: isVerifying } =
     authMutations.useVerifyEmailCode({
-      onSuccess: (data) => {
-        authenticationSession.saveResponse(data, false);
-        if (isNil(data.platformId)) {
-          onNeedsName();
-          return;
-        }
-        redirectAfterLogin();
+      onSuccess: (response) => {
+        mfaChallengeUtils.resolveSignIn({
+          response,
+          onChallenge: setChallenge,
+          onAuthenticated: completeSignIn,
+        });
       },
       onError: (error) => {
         setCode('');
@@ -881,6 +894,19 @@ function CodeStep({
       });
     }
   };
+
+  if (!isNil(challenge)) {
+    return (
+      <MfaChallenge
+        challenge={challenge}
+        onAuthenticated={completeSignIn}
+        onBack={() => {
+          setChallenge(null);
+          onBack();
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -1023,7 +1049,7 @@ function requestErrorMessage(error: HttpError): string {
       return t('Email domain is disallowed');
     }
     if (errorCode === ErrorCode.EMAIL_AUTH_DISABLED) {
-      return t('Email sign-in is disabled');
+      return t('This email must sign in with SSO');
     }
     if (captchaUtils.isRejection(error)) {
       return t('That verification expired. Please try again.');
@@ -1049,7 +1075,7 @@ function codeErrorMessage(error: HttpError): string {
       return t('You need an invitation to sign up.');
     }
     if (errorCode === ErrorCode.EMAIL_AUTH_DISABLED) {
-      return t('Email sign-in is disabled');
+      return t('This email must sign in with SSO');
     }
   }
   return t('Something went wrong, please try again later');

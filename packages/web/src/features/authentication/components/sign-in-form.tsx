@@ -4,7 +4,9 @@ import {
   ApEdition,
   ApFlagId,
   AuthenticationResponse,
+  MfaChallengeResponse,
   SignInRequest,
+  SignInResponse,
   TelemetryEventName,
 } from '@activepieces/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,7 +35,10 @@ import {
   useRedirectAfterLogin,
 } from '@/lib/navigation-utils';
 
+import { mfaChallengeUtils } from '../utils/mfa-challenge-utils';
+
 import { CheckEmailNote } from './check-email-note';
+import { MfaChallenge } from './mfa/mfa-challenge';
 
 const SignInSchema = z.object({
   email: z.string().regex(formatUtils.emailRegex, t('Email is invalid')),
@@ -45,6 +50,7 @@ type SignInSchema = z.infer<typeof SignInSchema>;
 const SignInForm = ({ onForgotPassword }: SignInFormProps) => {
   const [showCheckYourEmailNote, setShowCheckYourEmailNote] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [challenge, setChallenge] = useState<MfaChallengeResponse | null>(null);
   const form = useForm<SignInSchema>({
     resolver: zodResolver(SignInSchema),
     defaultValues: {
@@ -61,20 +67,28 @@ const SignInForm = ({ onForgotPassword }: SignInFormProps) => {
   const navigate = useNavigate();
   const { capture } = useTelemetry();
 
+  const completeSignIn = (data: AuthenticationResponse) => {
+    authenticationSession.saveResponse(data, false);
+
+    if (isNil(data.platformId)) {
+      navigate('/create-platform');
+      return;
+    }
+    redirectAfterLogin();
+  };
+
   const { mutate, isPending } = useMutation<
-    AuthenticationResponse,
+    SignInResponse,
     HttpError,
     SignInRequest
   >({
     mutationFn: authenticationApi.signIn,
     onSuccess: (data) => {
-      authenticationSession.saveResponse(data, false);
-
-      if (isNil(data.platformId)) {
-        navigate('/create-platform');
-        return;
-      }
-      redirectAfterLogin();
+      mfaChallengeUtils.resolveSignIn({
+        response: data,
+        onChallenge: setChallenge,
+        onAuthenticated: completeSignIn,
+      });
     },
     onError: (error) => {
       if (api.isError(error)) {
@@ -117,7 +131,7 @@ const SignInForm = ({ onForgotPassword }: SignInFormProps) => {
           }
           case ErrorCode.EMAIL_AUTH_DISABLED: {
             form.setError('root.serverError', {
-              message: t(`Email authentication has been disabled`),
+              message: t('This email must sign in with SSO'),
             });
             break;
           }
@@ -151,6 +165,16 @@ const SignInForm = ({ onForgotPassword }: SignInFormProps) => {
     // (after the verification email), so the stashed attribution rides along.
     mutate({ ...data, attribution: acquisitionUtils.getAcquisitionParams() });
   };
+
+  if (!isNil(challenge)) {
+    return (
+      <MfaChallenge
+        challenge={challenge}
+        onAuthenticated={completeSignIn}
+        onBack={() => setChallenge(null)}
+      />
+    );
+  }
 
   return (
     <>

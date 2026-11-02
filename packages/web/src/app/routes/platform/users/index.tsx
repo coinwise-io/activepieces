@@ -1,4 +1,5 @@
 import {
+  PlatformRole,
   UserInvitation,
   UserStatus,
   UserWithMetaInformation,
@@ -6,6 +7,7 @@ import {
 import { t } from 'i18next';
 import { Gem, User } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 import {
   AdminDataTable,
@@ -16,12 +18,17 @@ import {
 import { UserRoundPlusIcon } from '@/components/icons/user-round-plus';
 import { Button } from '@/components/ui/button';
 import { internalErrorToast } from '@/components/ui/sonner';
+import {
+  mfaHooks,
+  mfaMutations,
+} from '@/features/authentication/hooks/mfa-hooks';
 import { useSeatLimitGuard } from '@/features/billing';
 import { InviteUserDialog } from '@/features/members';
 import {
   platformUserHooks,
   platformUserMutations,
 } from '@/features/platform-admin/hooks/platform-user-hooks';
+import { userHooks } from '@/hooks/user-hooks';
 import { AdminControl, adminControl } from '@/lib/admin-control';
 
 import { UserActions } from './actions/user-actions';
@@ -57,6 +64,18 @@ export default function UsersPage() {
     isError: invitationsError,
     refetch: refetchInvitations,
   } = platformUserHooks.usePlatformInvitations();
+
+  const { data: currentUser } = userHooks.useCurrentUser();
+  const { data: twoFactorUserIds } = mfaHooks.useEnrolledUserIds({
+    enabled: currentUser?.platformRole === PlatformRole.ADMIN,
+  });
+  const twoFactorUserIdSet = useMemo(
+    () => new Set(twoFactorUserIds ?? []),
+    [twoFactorUserIds],
+  );
+  const { mutateAsync: resetTwoFactor } = mfaMutations.useResetUser({
+    onSuccess: () => toast.success(t('Two-factor authentication was reset')),
+  });
 
   const refetch = () => {
     refetchUsers();
@@ -119,7 +138,9 @@ export default function UsersPage() {
     });
   };
 
-  const columns = createUsersTableColumns();
+  const columns = createUsersTableColumns({
+    twoFactorUserIds: twoFactorUserIdSet,
+  });
 
   return (
     <AdminPage>
@@ -165,6 +186,9 @@ export default function UsersPage() {
               onDelete={handleDelete}
               onToggleStatus={handleToggleStatus}
               onUpdate={refetch}
+              hasTwoFactor={twoFactorUserIdSet.has(row.id)}
+              isCurrentUser={row.id === currentUser?.id}
+              onResetTwoFactor={resetTwoFactor}
             />
           ),
         ]}
