@@ -39,6 +39,7 @@ describe('Sign-in discovery', () => {
             platform: {
                 emailAuthEnabled: true,
                 googleAuthEnabled: false,
+                ssoDomain: 'acme.com',
                 federatedAuthProviders: { saml: {} },
                 ssoDomainVerification: {
                     status: SsoDomainVerificationStatus.VERIFIED,

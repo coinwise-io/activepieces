@@ -25,6 +25,8 @@ SP-initiated SAML 2.0 sign-in against the company IdP, tested with JumpCloud. Th
 - **Metadata URLs are fetched once at save time** through `safeHttp`, https on every hop, with a 1 MB limit and a 10 s deadline. The fetched XML is what gets stored.
 - **The Redis stores use MULTI GET+DEL, not GETDEL**, so Redis older than 6.2 still works.
 - **CE follows the platform sign-in settings.** Turning email off is refused while it is the only working method.
+- **"Email sign-in off" only binds the SSO domain.** While SSO is active, accounts on any other domain keep their password: that is how break-glass and external accounts work. Every password sign-in then needs a second factor, see [[mfa-totp]]. `enforceAllowedAuthDomains` still applies, so a break-glass domain must be on that list when it is enforced.
+- **The Redis helper is shared.** `authTransientStore` (`authentication/lib`) backs both the SAML stores and the MFA challenges.
 
 ## Key files
 - `packages/server/api/src/app/authentication/saml/` — `samlModule`, the service, config validator, and request/code stores

@@ -1,5 +1,5 @@
 import { isNil } from '@activepieces/core-utils'
-import { ApplicationEventName, attributionUtils, CompleteSignUpRequest, PrincipalType, SignInRequest, SignUpMethod, SignUpRequest, SwitchPlatformRequest, TelemetryEventName, UserIdentityProvider } from '@activepieces/shared'
+import { ApplicationEventName, attributionUtils, CompleteSignUpRequest, mfaUtils, PrincipalType, SignInRequest, SignUpMethod, SignUpRequest, SwitchPlatformRequest, TelemetryEventName, UserIdentityProvider } from '@activepieces/shared'
 import { FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { securityAccess } from '../core/security/authorization/fastify-security'
@@ -33,6 +33,9 @@ export const authenticationController: FastifyPluginAsyncZod = async (
             provider: UserIdentityProvider.EMAIL,
             platformId: platformId ?? null,
         })
+        if (mfaUtils.isMfaChallenge(response)) {
+            return response
+        }
 
         if (signedUp && !isNil(response.platformId)) {
             applicationEvents(request.log).sendUserEvent({
@@ -65,6 +68,9 @@ export const authenticationController: FastifyPluginAsyncZod = async (
             password: request.body.password,
             predefinedPlatformId,
         })
+        if (mfaUtils.isMfaChallenge(response)) {
+            return response
+        }
 
         if (signedUp && !isNil(response.platformId)) {
             rejectedPromiseHandler(telemetry(request.log).identifySignUp({

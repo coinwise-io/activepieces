@@ -50,9 +50,9 @@ Platform owners / members with `WRITE_INVITATION` invite users to a platform (gr
 
 `User` ties a `UserIdentity` to one platform (unique `(platformId, identityId)`). PlatformRole: ADMIN (all projects), MEMBER (own + team), OPERATOR (read all except others' personal). Session = user ACTIVE + identity verified + tokenVersion match; logout increments tokenVersion. `GET/POST /v1/users/me` (CE); platform admin user CRUD (list/role/status/delete) is EE.
 
-### SCIM 2.0 (EE)
+### SSO, SCIM and two-factor (MIT, this fork)
 
-IdP-driven provisioning (Okta/Azure AD/Google). SCIM User → AP User+UserIdentity (provider SAML); SCIM Group → AP `TEAM` project. Auth = API key as Bearer (`platformAdminOnly SERVICE`); MIME `application/scim+json`. Endpoints under `/v1/scim/v2/Users|Groups` + discovery. DELETE user = deactivate (status INACTIVE), not hard delete. Group members added with `SCIM_DEFAULT_PROJECT_ROLE` (default EDITOR). Supports Patch + Filter (max 100); no bulk/sort/password. Gated by `scimEnabled`.
+SAML 2.0 sign-in through JumpCloud once the SSO domain is DNS-verified, see *sso-saml*. SCIM 2.0 at `/v1/scim/v2` provisions users and groups with `scim_` bearer tokens and never touches platform admins, see *scim*. Password sign-ins on a platform with SSO active need TOTP, see *mfa-totp*; accounts outside the SSO domain keep their password as break-glass accounts.
 
 ## Pages
 
@@ -63,6 +63,8 @@ IdP-driven provisioning (Okta/Azure AD/Google). SCIM User → AP User+UserIdenti
 - **Secret Managers** — external vaults (AWS, Vault, Conjur, 1Password)
 - **CE Authentication** — UserIdentity, OTP, federated login
 - **EE Authentication (SSO/RBAC)** — SAML 2.0, roles, enforcement
-- **SCIM** — user provisioning (Okta, Microsoft Entra ID)
+- **SSO (SAML)** — SP-initiated SAML, SSO domain, break-glass rule
+- **SCIM** — user and group provisioning (JumpCloud)
+- **Two-factor (TOTP)** — second factor for password sign-ins, recovery codes, admin reset
 - **API Keys** — platform-scoped, hashed, `sk-` prefixed
 - **Testing OAuth2 Connects Locally** — driving a real connect on a dev box, and forcing awkward code shapes

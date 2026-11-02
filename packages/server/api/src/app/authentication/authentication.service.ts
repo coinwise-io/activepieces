@@ -1,6 +1,6 @@
 import { ActivepiecesError, assertNotNullOrUndefined, ErrorCode, isNil } from '@activepieces/core-utils'
 import { cryptoUtils } from '@activepieces/server-utils'
-import { ApEdition, ApEnvironment, ApFlagId, AuthenticationResponse, OtpType, PlatformWithoutSensitiveData, User, UserIdentity, UserIdentityProvider } from '@activepieces/shared'
+import { ApEdition, ApEnvironment, ApFlagId, AuthenticationResponse, mfaUtils, OtpType, PlatformWithoutSensitiveData, User, UserIdentity, UserIdentityProvider } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { flagService } from '../flags/flag.service'
 import { rejectedPromiseHandler } from '../helper/promise-handler'
@@ -9,8 +9,9 @@ import { AppSystemProp } from '../helper/system/system-props'
 import { platformService } from '../platform/platform.service'
 import { userService } from '../user/user-service'
 import { userInvitationsService } from '../user-invitations/user-invitation.service'
-import { AuthenticationResult, authenticationUtils, SignInMethods } from './authentication-utils'
+import { AuthenticationResult, authenticationUtils, SignInMethods, SignInResult } from './authentication-utils'
 import { zerobounce } from './lib/zerobounce'
+import { mfaService } from './mfa/mfa.service'
 import { otpService } from './otp/otp-service'
 import { userIdentityService } from './user-identity/user-identity-service'
 import { verifiedDomainHooks } from './verified-domain-hooks'
@@ -18,7 +19,7 @@ import { verifiedDomainHooks } from './verified-domain-hooks'
 const PLATFORM_CONTROLLED_PROVIDERS = new Set([UserIdentityProvider.JWT, UserIdentityProvider.SAML])
 
 export const authenticationService = (log: FastifyBaseLogger) => ({
-    async signUp(params: SignUpParams): Promise<AuthenticationResult> {
+    async signUp(params: SignUpParams): Promise<SignInResult> {
         if (requiresSignUpAbuseCheck(params.provider)) {
             const maySignUp = await zerobounce.maySignUp({ email: params.email, log })
             if (!maySignUp) {
@@ -31,6 +32,7 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
             await authenticationUtils(log).assertEmailAuthIsEnabled({
                 platformId,
                 provider: params.provider,
+                email: params.email,
             })
             await authenticationUtils(log).assertDomainIsAllowed({
                 email: params.email,
@@ -53,10 +55,11 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
             await userInvitationsService(log).provisionUserInvitation({ email: params.email })
 
             log.info({ email: params.email, platform: { id: platformId } }, 'User signed up to existing platform')
-            const response = await authenticationUtils(log).getProjectAndToken({
+            const response = await mfaService(log).issueSession({
                 userId: user.id,
                 platformId,
                 projectId: null,
+                provider: params.provider,
             })
             return { response, signedUp: true }
         }
@@ -79,19 +82,21 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
                 platformId: preferredPlatformId,
             })
             log.info({ email: params.email, provider: params.provider, preferredPlatformId }, 'User signed up with invitation, returning preferred platform token')
-            const authResponse =  await authenticationUtils(log).getProjectAndToken({
+            const authResponse = await mfaService(log).issueSession({
                 userId: user.id,
                 platformId: preferredPlatformId,
                 projectId: null,
+                provider: params.provider,
             })
-            rejectedPromiseHandler(authenticationUtils(log).sendTelemetry({ identity: userIdentity, user, projectId: authResponse.projectId ?? '' }), log)
+            const projectId = mfaUtils.isMfaChallenge(authResponse) ? '' : authResponse.projectId ?? ''
+            rejectedPromiseHandler(authenticationUtils(log).sendTelemetry({ identity: userIdentity, user, projectId }), log)
             return { response: authResponse, signedUp: true }
         }
         log.info({ email: params.email, provider: params.provider }, 'User signed up without a platform to join')
         return authenticationUtils(log).provisionOrOnboard({ identityId: userIdentity.id })
 
     },
-    async signInWithPassword(params: SignInWithPasswordParams): Promise<AuthenticationResult> {
+    async signInWithPassword(params: SignInWithPasswordParams): Promise<SignInResult> {
         const identity = await userIdentityService(log).verifyIdentityPassword(params)
         const platformId = isNil(params.predefinedPlatformId) ? await authenticationService(log).selectCloudSignInPlatformId({ identityId: identity.id }) : params.predefinedPlatformId
 
@@ -106,6 +111,7 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
         await authenticationUtils(log).assertEmailAuthIsEnabled({
             platformId,
             provider: UserIdentityProvider.EMAIL,
+            email: params.email,
         })
         await authenticationUtils(log).assertDomainIsAllowed({
             email: params.email,
@@ -124,10 +130,11 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
             })
         }
         log.info({ email: params.email, platform: { id: platformId } }, 'User signed in with password')
-        const response = await authenticationUtils(log).getProjectAndToken({
+        const response = await mfaService(log).issueSession({
             userId: user.id,
             platformId,
             projectId: null,
+            provider: UserIdentityProvider.EMAIL,
         })
         return { response, signedUp: false }
     },
@@ -149,7 +156,7 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
             if (!isNil(userIdentity)) {
                 return authenticationUtils(log).provisionOrOnboard({ identityId: userIdentity.id })
             }
-            return authenticationService(log).signUp({
+            return expectSession(await authenticationService(log).signUp({
                 email: params.email,
                 firstName: params.firstName,
                 lastName: params.lastName,
@@ -159,7 +166,7 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
                 platformId: null,
                 password: await cryptoUtils.generateRandomPassword(),
                 imageUrl: params.imageUrl,
-            })
+            }))
         }
 
         if (params.provider == UserIdentityProvider.SAML) {
@@ -170,7 +177,7 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
         }
 
         if (isNil(userIdentity)) {
-            return authenticationService(log).signUp({
+            return expectSession(await authenticationService(log).signUp({
                 email: params.email,
                 firstName: params.firstName,
                 lastName: params.lastName,
@@ -180,19 +187,20 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
                 platformId,
                 password: await cryptoUtils.generateRandomPassword(),
                 imageUrl: params.imageUrl,
-            })
+            }))
         }
         const { user, created } = await userService(log).getOrCreateWithProject({
             identity: userIdentity,
             platformId,
         })
         await userInvitationsService(log).provisionUserInvitation({ email: params.email })
-        const response = await authenticationUtils(log).getProjectAndToken({
+        const response = await mfaService(log).issueSession({
             userId: user.id,
             platformId,
             projectId: null,
+            provider: params.provider,
         })
-        return { response, signedUp: created }
+        return expectSession({ response, signedUp: created })
     },
     async switchPlatform(params: SwitchPlatformParams): Promise<AuthenticationResponse> {
         const platforms = await platformService(log).listPlatformsForIdentity({ identityId: params.identityId })
@@ -201,6 +209,7 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
 
         assertNotNullOrUndefined(platform, 'Platform not found')
         const user = await getUserForPlatform(params.identityId, platform, log)
+        await mfaService(log).assertNotRequired({ userId: user.id, platformId: platform.id })
         log.info({ user: { id: user.id }, platform: { id: platform.id } }, 'User switched platform')
         return authenticationUtils(log).getProjectAndToken({
             userId: user.id,
@@ -278,6 +287,13 @@ async function selectCloudSignInPlatformIdByEmail({ email, log }: SelectCloudSig
 }
 
 
+
+function expectSession({ response, signedUp }: SignInResult): AuthenticationResult {
+    if (mfaUtils.isMfaChallenge(response)) {
+        throw new ActivepiecesError({ code: ErrorCode.MFA_REQUIRED, params: {} })
+    }
+    return { response, signedUp }
+}
 
 function requiresSignUpAbuseCheck(provider: UserIdentityProvider): boolean {
     return !PLATFORM_CONTROLLED_PROVIDERS.has(provider)

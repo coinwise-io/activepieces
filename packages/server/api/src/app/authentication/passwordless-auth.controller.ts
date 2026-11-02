@@ -1,5 +1,5 @@
 import { isNil } from '@activepieces/core-utils'
-import { ApplicationEventName, RequestEmailCodeRequest, SignUpMethod, TelemetryEventName, VerifyEmailCodeRequest } from '@activepieces/shared'
+import { ApplicationEventName, mfaUtils, RequestEmailCodeRequest, SignUpMethod, TelemetryEventName, VerifyEmailCodeRequest } from '@activepieces/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { securityAccess } from '../core/security/authorization/fastify-security'
@@ -32,6 +32,9 @@ export const passwordlessAuthController: FastifyPluginAsyncZod = async (
             code: request.body.code,
             platformId: platformId ?? null,
         })
+        if (mfaUtils.isMfaChallenge(response)) {
+            return response
+        }
 
         if (signedUp && !isNil(response.platformId)) {
             rejectedPromiseHandler(telemetry(request.log).identifySignUp({

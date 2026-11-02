@@ -9,6 +9,7 @@ import { commonProperties } from './database-connection'
 import { Migration } from './migration'
 import { InitialSchema1879000000000 } from './migration/postgres/1879000000000-InitialSchema'
 import { AddIdentityProvisioning1880000000000 } from './migration/postgres/1880000000000-AddIdentityProvisioning'
+import { AddUserMfa1880000000001 } from './migration/postgres/1880000000001-AddUserMfa'
 
 const getSslConfig = (): boolean | TlsOptions => {
     const useSsl = system.get(AppSystemProp.POSTGRES_USE_SSL)
@@ -28,6 +29,7 @@ export const getMigrations = (): (new () => Migration)[] => {
     return [
         InitialSchema1879000000000,
         AddIdentityProvisioning1880000000000,
+        AddUserMfa1880000000001,
     ]
 }
 

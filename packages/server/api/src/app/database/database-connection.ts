@@ -9,6 +9,7 @@ import { PlatformModelTierEntity } from '../ai/platform-model-tier-entity'
 import { AiUsage5mEntity, AiUsageCopyCursorEntity, AiUsageDailyEntity, AiUsageRunEntity } from '../ai/usage/ai-usage-entities'
 import { PlatformAnalyticsReportEntity } from '../analytics/platform-analytics-report.entity'
 import { AppConnectionEntity } from '../app-connection/app-connection.entity'
+import { UserMfaEntity } from '../authentication/mfa/user-mfa.entity'
 import { OtpEntity } from '../authentication/otp/otp-entity'
 import { UserIdentityEntity } from '../authentication/user-identity/user-identity-entity'
 import { EventDestinationEntity } from '../event-destinations/event-destinations.entity'
@@ -110,6 +111,7 @@ function getEntities(): EntitySchema<unknown>[] {
         ScimTokenEntity,
         UserGroupEntity,
         UserGroupMemberEntity,
+        UserMfaEntity,
     ]
 }
 

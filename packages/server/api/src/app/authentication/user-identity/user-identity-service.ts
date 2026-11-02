@@ -97,6 +97,9 @@ export const userIdentityService = (log: FastifyBaseLogger) => ({
             tokenVersion: nanoid(),
         })
     },
+    async rotateTokenVersion({ id }: { id: string }): Promise<void> {
+        await userIdentityRepository().update(id, { tokenVersion: nanoid() })
+    },
     async updateNames({ id, firstName, lastName }: UpdateNamesParams): Promise<UserIdentity> {
         await userIdentityRepository().update(id, { firstName, lastName })
         return this.getOneOrFail({ id })

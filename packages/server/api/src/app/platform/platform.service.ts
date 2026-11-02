@@ -4,6 +4,7 @@ import { FastifyBaseLogger } from 'fastify'
 import { nanoid } from 'nanoid'
 import { EntityManager, IsNull } from 'typeorm'
 import { authenticationUtils } from '../authentication/authentication-utils'
+import { mfaService } from '../authentication/mfa/mfa.service'
 import { samlConfigValidator } from '../authentication/saml/saml-config-validator'
 import { userIdentityRepository, userIdentityService } from '../authentication/user-identity/user-identity-service'
 import { repoFactory } from '../core/db/repo-factory'
@@ -431,6 +432,7 @@ async function finishExistingPlatform({ user, platformId, name, invalidatePrevio
     if (invalidatePreviousTokens) {
         await rotateTokenVersion(identityId)
     }
+    await mfaService(log).assertNotRequired({ userId: user.id, platformId })
     return authenticationUtils(log).getProjectAndToken({
         userId: user.id,
         platformId,

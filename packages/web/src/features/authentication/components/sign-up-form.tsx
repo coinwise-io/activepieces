@@ -3,6 +3,8 @@ import {
   OtpType,
   ApEdition,
   ApFlagId,
+  AuthenticationResponse,
+  MfaChallengeResponse,
   TelemetryEventName,
 } from '@activepieces/shared';
 import { t } from 'i18next';
@@ -48,12 +50,14 @@ import {
 
 import { authMutations } from '../hooks/auth-hooks';
 import { captchaUtils } from '../utils/captcha-utils';
+import { mfaChallengeUtils } from '../utils/mfa-challenge-utils';
 import { passwordValidation } from '../utils/password-validation-utils';
 
 import {
   TurnstileWidget,
   useTurnstileSiteKey,
 } from './auth-landing/turnstile-widget';
+import { MfaChallenge } from './mfa/mfa-challenge';
 
 const SignUpForm = ({
   showCheckYourEmailNote,
@@ -65,6 +69,7 @@ const SignUpForm = ({
   const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [challenge, setChallenge] = useState<MfaChallengeResponse | null>(null);
 
   const form = useForm<SignUpSchema>({
     defaultValues: {
@@ -107,19 +112,29 @@ const SignUpForm = ({
     setShowCheckYourEmailNote(true);
   };
 
-  const { mutate, isPending } = authMutations.useSignUp({
-    onSuccess: (data) => {
-      if (data.verified) {
-        authenticationSession.saveResponse(data, false);
+  const completeSignUp = (data: AuthenticationResponse) => {
+    authenticationSession.saveResponse(data, false);
 
-        if (isNil(data.platformId)) {
-          navigate('/create-platform');
-          return;
-        }
-        redirectAfterLogin();
-      } else {
-        askToCheckEmail();
-      }
+    if (isNil(data.platformId)) {
+      navigate('/create-platform');
+      return;
+    }
+    redirectAfterLogin();
+  };
+
+  const { mutate, isPending } = authMutations.useSignUp({
+    onSuccess: (response) => {
+      mfaChallengeUtils.resolveSignIn({
+        response,
+        onChallenge: setChallenge,
+        onAuthenticated: (data) => {
+          if (data.verified) {
+            completeSignUp(data);
+          } else {
+            askToCheckEmail();
+          }
+        },
+      });
     },
     onError: (error) => {
       // The challenge token is single-use, so a refused attempt must be given a
@@ -218,6 +233,16 @@ const SignUpForm = ({
       attribution: acquisitionUtils.getAcquisitionParams(),
     });
   };
+
+  if (!isNil(challenge)) {
+    return (
+      <MfaChallenge
+        challenge={challenge}
+        onAuthenticated={completeSignUp}
+        onBack={() => setChallenge(null)}
+      />
+    );
+  }
 
   return showCheckYourEmailNote ? (
     <div className="pt-6">

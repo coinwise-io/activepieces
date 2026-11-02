@@ -10,11 +10,12 @@ import { telemetry } from '../helper/telemetry.utils'
 import { platformService } from '../platform/platform.service'
 import { userService } from '../user/user-service'
 import { userInvitationsService } from '../user-invitations/user-invitation.service'
-import { AuthenticationResult, authenticationUtils } from './authentication-utils'
+import { AuthenticationResult, authenticationUtils, SignInResult } from './authentication-utils'
 import { authenticationService } from './authentication.service'
 import { signupNames } from './lib/signup-names'
 import { turnstile } from './lib/turnstile'
 import { zerobounce } from './lib/zerobounce'
+import { mfaService } from './mfa/mfa.service'
 import { otpService } from './otp/otp-service'
 import { userIdentityService } from './user-identity/user-identity-service'
 
@@ -63,7 +64,7 @@ export const passwordlessAuthService = (log: FastifyBaseLogger) => ({
         }
     },
 
-    async verifyCode({ email, code, platformId }: VerifyCodeParams): Promise<AuthenticationResult> {
+    async verifyCode({ email, code, platformId }: VerifyCodeParams): Promise<SignInResult> {
         const identity = await userIdentityService(log).getIdentityByEmail(email)
         if (isNil(identity)) {
             throw new ActivepiecesError({ code: ErrorCode.INVALID_OTP, params: {} })
@@ -109,10 +110,11 @@ export const passwordlessAuthService = (log: FastifyBaseLogger) => ({
             })
             rejectedPromiseHandler(telemetry(log).aliasIdentity({ identityId: verifiedIdentity.id, userId: user.id, platformId }), log)
             await userInvitationsService(log).provisionUserInvitation({ email })
-            const response = await authenticationUtils(log).getProjectAndToken({
+            const response = await mfaService(log).issueSession({
                 userId: user.id,
                 platformId,
                 projectId: null,
+                provider: UserIdentityProvider.EMAIL,
             })
             return { response, signedUp: created }
         }
@@ -124,10 +126,11 @@ export const passwordlessAuthService = (log: FastifyBaseLogger) => ({
                 platformId: preferredPlatformId,
             })
             rejectedPromiseHandler(telemetry(log).aliasIdentity({ identityId: verifiedIdentity.id, userId: user.id, platformId: preferredPlatformId }), log)
-            const response = await authenticationUtils(log).getProjectAndToken({
+            const response = await mfaService(log).issueSession({
                 userId: user.id,
                 platformId: preferredPlatformId,
                 projectId: null,
+                provider: UserIdentityProvider.EMAIL,
             })
             return { response, signedUp: created }
         }
@@ -180,6 +183,7 @@ async function assertPlatformAuthIsOpenTo({ email, platformId, log }: PlatformGa
     await authenticationUtils(log).assertEmailAuthIsEnabled({
         platformId,
         provider: UserIdentityProvider.EMAIL,
+        email,
     })
     await authenticationUtils(log).assertDomainIsAllowed({ email, platformId })
 }

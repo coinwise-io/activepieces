@@ -116,6 +116,8 @@ const statusCodeMap: Partial<Record<ErrorCode, StatusCodes>> = {
     [ErrorCode.INVALID_SMTP_CREDENTIALS]: StatusCodes.BAD_REQUEST,
     [ErrorCode.INVALID_GIT_CREDENTIALS]: StatusCodes.BAD_REQUEST,
     [ErrorCode.INVALID_OTP]: StatusCodes.GONE,
+    [ErrorCode.MFA_CHALLENGE_EXPIRED]: StatusCodes.GONE,
+    [ErrorCode.MFA_REQUIRED]: StatusCodes.FORBIDDEN,
     [ErrorCode.VALIDATION]: StatusCodes.CONFLICT,
     [ErrorCode.REQUIRED_ACTIONS_MISSING]: StatusCodes.BAD_REQUEST,
     [ErrorCode.FILE_TOO_LARGE]: StatusCodes.REQUEST_TOO_LONG,

@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto'
 import { AuthenticationResponse } from '@activepieces/shared'
 import { z } from 'zod'
-import { samlTransientStore } from './saml-transient-store'
+import { authTransientStore } from '../lib/auth-transient-store'
 
 async function issue({ response, nonce }: IssueParams): Promise<string> {
     const code = randomBytes(CODE_BYTES).toString('base64url')
-    await samlTransientStore.put({
+    await authTransientStore.put({
         key: keyFor({ code }),
         value: { response, nonce },
         ttlSeconds: CODE_TTL_SECONDS,
@@ -14,7 +14,7 @@ async function issue({ response, nonce }: IssueParams): Promise<string> {
 }
 
 async function claim({ code }: ClaimParams): Promise<IssuedLogin | null> {
-    return samlTransientStore.take({ key: keyFor({ code }), schema: IssuedLoginSchema })
+    return authTransientStore.take({ key: keyFor({ code }), schema: IssuedLoginSchema })
 }
 
 function keyFor({ code }: ClaimParams): string {

@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto'
 import { PlatformId } from '@activepieces/core-utils'
 import { z } from 'zod'
-import { samlTransientStore } from './saml-transient-store'
+import { authTransientStore } from '../lib/auth-transient-store'
 
 async function record({ requestId, platformId }: RecordParams): Promise<string> {
     const nonce = randomBytes(NONCE_BYTES).toString('base64url')
-    await samlTransientStore.put({
+    await authTransientStore.put({
         key: requestKey({ requestId }),
         value: { platformId, nonce },
         ttlSeconds: REQUEST_TTL_SECONDS,
@@ -14,11 +14,11 @@ async function record({ requestId, platformId }: RecordParams): Promise<string> 
 }
 
 async function consume({ requestId }: ConsumeParams): Promise<PendingRequest | null> {
-    return samlTransientStore.take({ key: requestKey({ requestId }), schema: PendingRequestSchema })
+    return authTransientStore.take({ key: requestKey({ requestId }), schema: PendingRequestSchema })
 }
 
 async function markAssertionSeen({ assertionId, ttlSeconds }: MarkAssertionSeenParams): Promise<boolean> {
-    return samlTransientStore.putIfAbsent({ key: `saml_assertion:${assertionId}`, ttlSeconds })
+    return authTransientStore.putIfAbsent({ key: `saml_assertion:${assertionId}`, ttlSeconds })
 }
 
 function requestKey({ requestId }: ConsumeParams): string {

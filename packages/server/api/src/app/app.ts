@@ -19,6 +19,7 @@ import { platformAnalyticsModule } from './analytics/platform-analytics.module'
 import { appConnectionModule } from './app-connection/app-connection.module'
 import { platformAppConnectionModule } from './app-connection/platform-app-connection.module'
 import { authenticationModule } from './authentication/authentication.module'
+import { mfaModule } from './authentication/mfa/mfa.module'
 import { otpModule } from './authentication/otp/otp-module'
 import { samlModule } from './authentication/saml/saml.module'
 import { canaryRoutingMiddleware } from './core/canary/canary-routing.middleware'
@@ -199,6 +200,7 @@ export const setupApp = async (app: FastifyInstance): Promise<FastifyInstance> =
     await app.register(appEventRoutingModule)
     await app.register(authenticationModule)
     await app.register(samlModule)
+    await app.register(mfaModule)
     await app.register(triggerModule)
     await app.register(platformModule)
     await app.register(piecesReportModule)

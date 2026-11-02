@@ -1,5 +1,5 @@
 import { ActivepiecesError, assertNotNullOrUndefined, ErrorCode, isNil } from '@activepieces/core-utils'
-import { ApEnvironment, AuthenticationResponse, EndpointScope, pickTelemetryPii, Platform, PlatformRole, PlatformWithoutSensitiveData, PrincipalType, Project, ProjectType, SsoDomainVerificationStatus, TelemetryEventName, User, UserIdentity, UserIdentityProvider, UserStatus } from '@activepieces/shared'
+import { ApEnvironment, AuthenticationResponse, EndpointScope, pickTelemetryPii, Platform, PlatformRole, PlatformWithoutSensitiveData, PrincipalType, Project, ProjectType, SignInResponse, SsoDomainVerificationStatus, TelemetryEventName, User, UserIdentity, UserIdentityProvider, UserStatus } from '@activepieces/shared'
 import { FastifyBaseLogger, FastifyRequest } from 'fastify'
 import { system } from '../helper/system/system'
 import { AppSystemProp } from '../helper/system/system-props'
@@ -10,6 +10,7 @@ import { userService } from '../user/user-service'
 import { userInvitationsService } from '../user-invitations/user-invitation.service'
 import { accessTokenManager } from './lib/access-token-manager'
 import { signupNames } from './lib/signup-names'
+import { ssoPolicy } from './sso-policy'
 import { userIdentityService } from './user-identity/user-identity-service'
 
 export const authenticationUtils = (log: FastifyBaseLogger) => ({
@@ -42,23 +43,7 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
         const project = isNil(params.projectId)
             ? findPersonalProject(projects, params.userId) ?? projects?.[0]
             : projects.find((project) => project.id === params.projectId)
-        const identity = await userIdentityService(log).getOneOrFail({ id: user.identityId })
-        if (!identity.verified) {
-            throw new ActivepiecesError({
-                code: ErrorCode.EMAIL_IS_NOT_VERIFIED,
-                params: {
-                    email: identity.email,
-                },
-            })
-        }
-        if (user.status === UserStatus.INACTIVE) {
-            throw new ActivepiecesError({
-                code: ErrorCode.USER_IS_INACTIVE,
-                params: {
-                    email: identity.email,
-                },
-            })
-        }
+        const identity = await this.assertUserMaySignIn({ userId: user.id })
         const token = await accessTokenManager(log).generateToken({
             id: user.id,
             type: PrincipalType.USER,
@@ -78,6 +63,28 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
             token,
             projectId: project?.id ?? null,
         }
+    },
+
+    async assertUserMaySignIn({ userId }: { userId: string }): Promise<UserIdentity> {
+        const user = await userService(log).getOneOrFail({ id: userId })
+        const identity = await userIdentityService(log).getOneOrFail({ id: user.identityId })
+        if (!identity.verified) {
+            throw new ActivepiecesError({
+                code: ErrorCode.EMAIL_IS_NOT_VERIFIED,
+                params: {
+                    email: identity.email,
+                },
+            })
+        }
+        if (user.status === UserStatus.INACTIVE) {
+            throw new ActivepiecesError({
+                code: ErrorCode.USER_IS_INACTIVE,
+                params: {
+                    email: identity.email,
+                },
+            })
+        }
+        return identity
     },
 
     async getOnboardingResponse({ identityId }: GetOnboardingResponseParams): Promise<AuthenticationResponse> {
@@ -171,6 +178,7 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
     async assertEmailAuthIsEnabled({
         platformId,
         provider,
+        email,
     }: AssertEmailAuthIsEnabledParams): Promise<void> {
         const platform = await platformService(log).getOneWithPlanOrThrow(platformId)
         if (!platform.plan.ssoEnabled) {
@@ -179,7 +187,8 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
         if (provider !== UserIdentityProvider.EMAIL) {
             return
         }
-        if (!platform.emailAuthEnabled) {
+        const breakGlassAccount = ssoPolicy.isSsoActive({ platform }) && !ssoPolicy.isInSsoDomain({ platform, email })
+        if (!platform.emailAuthEnabled && !breakGlassAccount) {
             throw new ActivepiecesError({
                 code: ErrorCode.EMAIL_AUTH_DISABLED,
                 params: {},
@@ -254,7 +263,7 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
         return {
             email: platform.emailAuthEnabled,
             google: isGoogleConfigured() && platform.googleAuthEnabled,
-            sso: !isNil(platform.federatedAuthProviders?.saml) && platform.ssoDomainVerification?.status === SsoDomainVerificationStatus.VERIFIED,
+            sso: ssoPolicy.isSsoActive({ platform }),
         }
     },
 })
@@ -281,6 +290,7 @@ type AssertDomainIsAllowedParams = {
 type AssertEmailAuthIsEnabledParams = {
     platformId: string
     provider: UserIdentityProvider
+    email: string
 }
 
 type AssertEmailMatchesSsoDomainParams = {
@@ -302,6 +312,11 @@ export type AuthenticationResult = {
     signedUp: boolean
 }
 
+export type SignInResult = {
+    response: SignInResponse
+    signedUp: boolean
+}
+
 export type SignInMethods = {
     email: boolean
     google: boolean
@@ -309,7 +324,7 @@ export type SignInMethods = {
 }
 
 type GetSignInMethodsParams = {
-    platform: Pick<Platform | PlatformWithoutSensitiveData, 'emailAuthEnabled' | 'googleAuthEnabled' | 'federatedAuthProviders' | 'ssoDomainVerification'>
+    platform: Pick<Platform | PlatformWithoutSensitiveData, 'emailAuthEnabled' | 'googleAuthEnabled' | 'federatedAuthProviders' | 'ssoDomain' | 'ssoDomainVerification'>
 }
 
 type GetOnboardingResponseParams = {
