@@ -24,7 +24,9 @@ async function buildChecker({ userId, projectId, log }: ResolveCheckerParams): P
     if (access.unrestricted) {
         return ALLOW_ALL
     }
-    return checkerFor({ allowed: new Set(accessPolicy.projectScopePermissions({ access })) })
+    const hasNarrowGrants = access.grants.some((grant) => !accessPolicy.isProjectScope(grant))
+    const narrowReadPermissions = hasNarrowGrants ? NARROWED_READ_PERMISSIONS : []
+    return checkerFor({ allowed: new Set([...accessPolicy.projectScopePermissions({ access }), ...narrowReadPermissions]) })
 }
 
 function checkerFor({ allowed }: { allowed: Set<Permission> }): PermissionChecker {
@@ -47,6 +49,8 @@ function requiredPermissionOf({ permission, toolTitle }: { permission: Permissio
     }
     return BUILDER_ONLY_TOOLS.includes(toolTitle) ? Permission.WRITE_FLOW : undefined
 }
+
+const NARROWED_READ_PERMISSIONS: Permission[] = [Permission.READ_RUN]
 
 const BUILDER_ONLY_TOOLS: string[] = [
     'ap_resolve_property_options',

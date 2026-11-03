@@ -1,10 +1,12 @@
 import { apId } from '@activepieces/core-utils'
-import { AccessRole, PrincipalType, WebsocketServerEvent } from '@activepieces/shared'
+import { AccessPrincipalType, AccessRole, PrincipalType, UserStatus, WebsocketServerEvent } from '@activepieces/shared'
 import { FastifyInstance } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
 import { Socket } from 'socket.io'
 import { vi } from 'vitest'
 import { websocketService } from '../../../../src/app/core/websockets.service'
+import { scimGroupService } from '../../../../src/app/identity-provisioning/scim/scim-group.service'
+import { userService } from '../../../../src/app/user/user-service'
 import { accessTestUtils } from '../../../helpers/access-control'
 import { generateMockToken } from '../../../helpers/auth'
 import { db } from '../../../helpers/db'
@@ -175,7 +177,7 @@ describe('Websocket access', () => {
         const tab = await openTab({ userId: memberOne.user.id, platformId: admin.platform.id, projectId: admin.project.id })
         expect(tab.socket.rooms.has(admin.project.id)).toBe(true)
         expect(tab.socket.rooms.has(`${admin.project.id}:run-viewers`)).toBe(true)
-        vi.spyOn(app.io, 'in').mockReturnValue(fakeBroadcast([tab.socket]))
+        mockIo({ sockets: [tab.socket] })
 
         const response = await admin.delete(`/v1/access-grants/${grant.id}`)
 
@@ -189,13 +191,53 @@ describe('Websocket access', () => {
         const grant = await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EDITOR })
         const tab = await openTab({ userId: memberOne.user.id, platformId: admin.platform.id, projectId: admin.project.id })
         await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EXECUTOR, flowId: flow.id })
-        vi.spyOn(app.io, 'in').mockReturnValue(fakeBroadcast([tab.socket]))
+        mockIo({ sockets: [tab.socket] })
 
         await admin.delete(`/v1/access-grants/${grant.id}`)
 
         expect(tab.socket.disconnected).toBe(false)
         expect(tab.socket.rooms.has(admin.project.id)).toBe(false)
         expect(tab.socket.rooms.has(`${admin.project.id}:run-viewers`)).toBe(false)
+    })
+
+    it('evicts a narrow member from the flow room when the flow grant is deleted', async () => {
+        const { admin, memberOne } = await accessTestUtils.setup(app)
+        const flow = await accessTestUtils.createFlow({ ctx: admin })
+        const kept = await accessTestUtils.createFlow({ ctx: admin })
+        const grant = await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EDITOR, flowId: flow.id })
+        await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EDITOR, flowId: kept.id })
+        const tab = await openTab({ userId: memberOne.user.id, platformId: admin.platform.id, projectId: admin.project.id })
+        await tab.emit({ event: WebsocketServerEvent.JOIN_PRESENCE, data: { resourceId: flow.id } })
+        expect(tab.socket.rooms.has(websocketService.resourceRoom(flow.id))).toBe(true)
+        mockIo({ sockets: [tab.socket] })
+
+        await admin.delete(`/v1/access-grants/${grant.id}`)
+
+        expect(tab.socket.disconnected).toBe(false)
+        expect(tab.socket.rooms.has(websocketService.resourceRoom(flow.id))).toBe(false)
+    })
+
+    it('disconnects a member whose group is removed through SCIM', async () => {
+        const { admin, memberOne } = await accessTestUtils.setup(app)
+        const group = await accessTestUtils.createGroup({ platformId: admin.platform.id, memberIds: [memberOne.user.id] })
+        await accessTestUtils.grant({ ctx: admin, principalType: AccessPrincipalType.GROUP, principalId: group.id, role: AccessRole.EDITOR })
+        const tab = await openTab({ userId: memberOne.user.id, platformId: admin.platform.id, projectId: admin.project.id })
+        mockIo({ sockets: [tab.socket] })
+
+        await scimGroupService.delete({ platformId: admin.platform.id, id: group.id })
+
+        expect(tab.socket.disconnected).toBe(true)
+    })
+
+    it('disconnects a member who is deactivated', async () => {
+        const { admin, memberOne } = await accessTestUtils.setup(app)
+        await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EDITOR })
+        const tab = await openTab({ userId: memberOne.user.id, platformId: admin.platform.id, projectId: admin.project.id })
+        mockIo({ sockets: [tab.socket] })
+
+        await userService(app.log).update({ id: memberOne.user.id, platformId: admin.platform.id, status: UserStatus.INACTIVE })
+
+        expect(tab.socket.disconnected).toBe(true)
     })
 
     it('lets a narrow member join presence only for flows they can see', async () => {
@@ -259,9 +301,13 @@ async function openTab({ userId, platformId, projectId }: { userId: string, plat
     }
 }
 
-function fakeBroadcast(sockets: FakeSocket[]): ReturnType<typeof app.io.in> {
-    const broadcast = { fetchSockets: async () => sockets }
-    return broadcast as unknown as ReturnType<typeof app.io.in>
+function mockIo({ sockets }: { sockets: FakeSocket[] }): void {
+    vi.spyOn(app.io, 'in').mockImplementation((room) => {
+        const rooms = [room].flat()
+        const members = sockets.filter((socket) => rooms.some((name) => socket.rooms.has(name)))
+        const broadcast = { fetchSockets: async () => members }
+        return broadcast as unknown as ReturnType<typeof app.io.in>
+    })
 }
 
 type FakeSocket = {

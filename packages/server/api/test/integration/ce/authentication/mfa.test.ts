@@ -227,15 +227,15 @@ describe('Admin reset', () => {
         expect(enrolled.json().userIds).toEqual([member.id])
 
         const asMember = await app.inject({
-            remoteAddress: faker.internet.ipv4(), method: 'DELETE', url: `/api/v1/authentication/mfa/users/${owner.id}`, headers: { authorization: `Bearer ${memberSession.token}` } })
+        remoteAddress: faker.internet.ipv4(), method: 'DELETE', url: `/api/v1/authentication/mfa/users/${owner.id}`, headers: { authorization: `Bearer ${memberSession.token}` } })
         expect(asMember.statusCode).toBe(StatusCodes.FORBIDDEN)
 
         const self = await app.inject({
-            remoteAddress: faker.internet.ipv4(), method: 'DELETE', url: `/api/v1/authentication/mfa/users/${owner.id}`, headers: { authorization: `Bearer ${owner.token}` } })
+        remoteAddress: faker.internet.ipv4(), method: 'DELETE', url: `/api/v1/authentication/mfa/users/${owner.id}`, headers: { authorization: `Bearer ${owner.token}` } })
         expect(self.statusCode).toBe(StatusCodes.FORBIDDEN)
 
         const reset = await app.inject({
-            remoteAddress: faker.internet.ipv4(), method: 'DELETE', url: `/api/v1/authentication/mfa/users/${member.id}`, headers: { authorization: `Bearer ${owner.token}` } })
+        remoteAddress: faker.internet.ipv4(), method: 'DELETE', url: `/api/v1/authentication/mfa/users/${member.id}`, headers: { authorization: `Bearer ${owner.token}` } })
         expect(reset.statusCode).toBe(StatusCodes.NO_CONTENT)
 
         const afterReset = await signIn({ email: 'member@breakglass.example' })

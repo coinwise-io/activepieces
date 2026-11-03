@@ -1,7 +1,8 @@
-import { apId } from '@activepieces/core-utils'
+import { apId, Permission } from '@activepieces/core-utils'
 import { AccessPrincipalType, AccessRole, FlowStatus, FlowTriggerType, FlowVersionState, MCP_TRIGGER_PIECE_NAME, PropertyExecutionType } from '@activepieces/shared'
 import { FastifyInstance } from 'fastify'
 import { afterEach, vi } from 'vitest'
+import { READ_ONLY_CHECKER } from '../../../../src/app/mcp/mcp-permissions'
 import { webhookRunOwner } from '../../../../src/app/webhooks/webhook-run-owner'
 import { webhookService } from '../../../../src/app/webhooks/webhook.service'
 import { accessTestUtils } from '../../../helpers/access-control'
@@ -143,6 +144,42 @@ describe('MCP access control', () => {
         expect(otherRun.toLowerCase()).toMatch(/denied|not found|permission/)
     })
 
+    it('stops running a flow once the executor grant is revoked', async () => {
+        const { admin, memberOne } = await accessTestUtils.setup(app)
+        const allowed = await seedMcpFlow({ admin, toolName: 'revokedtool' })
+        const grant = await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EXECUTOR, flowId: allowed.id })
+        const handle = vi.spyOn(webhookService, 'handleWebhook').mockResolvedValue({ status: 200, body: {}, headers: {} })
+        const client = await connect({ user: memberOne, admin })
+        const before = await mcpClientHelpers.listToolNames({ app, mcpClient: client })
+        const toolName = toolNamesStartingWith({ names: before, prefix: 'revokedtool' })[0]
+
+        await admin.delete(`/v1/access-grants/${grant.id}`)
+        const result = await mcpClientHelpers.callTool({ app, mcpClient: client, name: toolName })
+        const after = await mcpClientHelpers.listToolNames({ app, mcpClient: client })
+
+        expect(toolNamesStartingWith({ names: before, prefix: 'revokedtool' })).toHaveLength(1)
+        expect(toolNamesStartingWith({ names: after, prefix: 'revokedtool' })).toEqual([])
+        expect(result).not.toContain('Successfully executed')
+        expect(handle).not.toHaveBeenCalled()
+    })
+
+    it('lets a narrow editor read only the runs of the flows they hold', async () => {
+        const { admin, memberOne } = await accessTestUtils.setup(app)
+        const mine = await accessTestUtils.createFlow({ ctx: admin })
+        const other = await accessTestUtils.createFlow({ ctx: admin })
+        await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EDITOR, flowId: mine.id })
+        const visibleRun = await accessTestUtils.createRun({ projectId: admin.project.id, flow: mine, triggeredBy: admin.user.id })
+        const hiddenRun = await accessTestUtils.createRun({ projectId: admin.project.id, flow: other, triggeredBy: admin.user.id })
+        const client = await connect({ user: memberOne, admin })
+
+        const runs = await mcpClientHelpers.callTool({ app, mcpClient: client, name: 'ap_list_runs' })
+        const hidden = await mcpClientHelpers.callTool({ app, mcpClient: client, name: 'ap_get_run', args: { flowRunId: hiddenRun } })
+
+        expect(runs).toContain(visibleRun)
+        expect(runs).not.toContain(hiddenRun)
+        expect(hidden).not.toContain(hiddenRun)
+    })
+
     it('leaves platform admins unrestricted', async () => {
         const { admin } = await accessTestUtils.setup(app)
         await seedMcpFlow({ admin, toolName: 'admintoolone' })
@@ -172,6 +209,20 @@ describe('MCP access control', () => {
         expect(selectHidden).toContain('don\'t have access')
         expect(selectGranted).toContain('Project context set')
         expect(lists).toContain(DENIED)
+    })
+})
+
+describe('MCP without a user', () => {
+    it('only reads and never writes or builds', () => {
+        const read = READ_ONLY_CHECKER.check(Permission.READ_FLOW, 'ap_list_flows')
+        const write = READ_ONLY_CHECKER.check(Permission.WRITE_FLOW, 'ap_create_flow')
+        const execute = READ_ONLY_CHECKER.check(Permission.WRITE_RUN, 'ap_run_action')
+        const builder = READ_ONLY_CHECKER.check(undefined, 'ap_resolve_property_options')
+
+        expect(read).toBeNull()
+        expect(write?.isError).toBe(true)
+        expect(execute?.isError).toBe(true)
+        expect(builder?.isError).toBe(true)
     })
 })
 

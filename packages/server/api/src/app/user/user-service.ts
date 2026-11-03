@@ -113,8 +113,7 @@ export const userService = (log: FastifyBaseLogger) => ({
 
         await applyUpdate()
         if (!isNil(status) || !isNil(platformRole)) {
-            const { websocketService } = await import('../core/websockets.service')
-            await websocketService.refreshAccessForUsers({ userIds: [id], log })
+            await refreshSocketAccess({ userIds: [id], log })
         }
 
         return this.getMetaInformation({ id })
@@ -198,6 +197,7 @@ export const userService = (log: FastifyBaseLogger) => ({
             })
             await deleteIdentityIfOrphaned({ identityId: user.identityId, entityManager })
         })
+        await refreshSocketAccess({ userIds: [id], log })
     },
     async removeFromPlatform({ id, platformId }: DeleteParams): Promise<void> {
         await assertNotPlatformOwner({ id, platformId, log })
@@ -218,6 +218,7 @@ export const userService = (log: FastifyBaseLogger) => ({
         }, {
             lastLoggedInPlatformId: null,
         })
+        await refreshSocketAccess({ userIds: [id], log })
     },
 
     async getByPlatformRole(id: PlatformId, role: PlatformRole): Promise<UserSchema[]> {
@@ -294,6 +295,11 @@ export function mapToUserWithMetaInformation(user: (User & { identity?: UserIden
         lastActiveDate: user.lastActiveDate,
         imageUrl: identity.imageUrl,
     }
+}
+
+async function refreshSocketAccess({ userIds, log }: { userIds: UserId[], log: FastifyBaseLogger }): Promise<void> {
+    const { websocketService } = await import('../core/websockets.service')
+    await websocketService.refreshAccessForUsers({ userIds, log })
 }
 
 async function assertNotPlatformOwner({ id, platformId, log }: DeleteParams & { log: FastifyBaseLogger }): Promise<void> {

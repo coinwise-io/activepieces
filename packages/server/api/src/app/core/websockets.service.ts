@@ -46,7 +46,7 @@ export const websocketService = {
     },
     resourceRoom: (resourceId: string): string => resourceRoomName(resourceId),
     async refreshAccessForProject({ projectId, log = app!.log }: { projectId: string, log?: FastifyBaseLogger }): Promise<void> {
-        const { error } = await tryCatch(async () => refreshSockets({ sockets: await app!.io.in(projectId).fetchSockets(), log }))
+        const { error } = await tryCatch(async () => refreshSockets({ sockets: await app!.io.in(memberSocketsRoomName(projectId)).fetchSockets(), log }))
         if (!isNil(error)) {
             log.error({ error, project: { id: projectId } }, 'Failed to refresh websocket access for project')
         }
@@ -117,6 +117,7 @@ async function attachListeners({ socket, log }: AttachListenersParams): Promise<
                 project: { id: projectId },
             })
             await socket.join(principal.id)
+            await socket.join(memberSocketsRoomName(projectId))
             if (seesWholeProject({ access })) {
                 await socket.join(projectId)
             }
@@ -268,6 +269,10 @@ function hasPermission(access: ProjectAccess | null, permission: Permission): bo
 
 function runViewersRoomName(projectId: string): string {
     return `${projectId}:run-viewers`
+}
+
+function memberSocketsRoomName(projectId: string): string {
+    return `${projectId}:member-sockets`
 }
 
 type ValidateProjectIdArgs = {
