@@ -4,6 +4,7 @@ import { FastifyInstance } from 'fastify'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { mcpOAuthClientService } from '../../../../src/app/mcp/oauth/client/mcp-oauth-client.service'
 import { mcpOAuthTokenService } from '../../../../src/app/mcp/oauth/token/mcp-oauth-token.service'
+import { mockAndSaveBasicSetup } from '../../../helpers/mocks'
 import { setupTestEnvironment } from '../../../helpers/test-setup'
 
 let app: FastifyInstance
@@ -18,15 +19,16 @@ function requireRefreshToken(response: { refresh_token?: string }): string {
 async function exchangeFreshCode(clientId: string): Promise<string> {
     const codeVerifier = randomBytes(32).toString('base64url')
     const codeChallenge = createHash('sha256').update(codeVerifier).digest().toString('base64url')
+    const { mockOwner, mockPlatform, mockProject } = await mockAndSaveBasicSetup()
     const tokens = await mcpOAuthTokenService.exchangeCode({
         redirectUris: [],
         codeVerifier,
         codeChallenge,
         codeChallengeMethod: 'S256',
         clientId,
-        userId: apId(),
-        projectId: apId(),
-        platformId: apId(),
+        userId: mockOwner.id,
+        projectId: mockProject.id,
+        platformId: mockPlatform.id,
         scopes: ['mcp'],
     })
     return requireRefreshToken(tokens)

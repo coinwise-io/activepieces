@@ -1,13 +1,14 @@
 import { randomBytes } from 'crypto'
 import { ActivepiecesError, apId, ErrorCode, isNil, sanitizeObjectForPostgresql, SeekPage, spreadIfDefined, tryCatch, unique } from '@activepieces/core-utils'
 import { cryptoUtils } from '@activepieces/server-utils'
-import { McpOAuthClientKey, McpOAuthGrant, McpOAuthToken } from '@activepieces/shared'
+import { McpOAuthClientKey, McpOAuthGrant, McpOAuthToken, UserStatus } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { In, ObjectLiteral, SelectQueryBuilder } from 'typeorm'
 import { repoFactory } from '../../../core/db/repo-factory'
 import { JwtAudience, jwtUtils } from '../../../helper/jwt-utils'
 import { buildPaginator } from '../../../helper/pagination/build-paginator'
 import { paginationHelper } from '../../../helper/pagination/pagination-utils'
+import { UserEntity } from '../../../user/user-entity'
 import { mcpListingUtils } from '../../mcp-listing-utils'
 import { mcpOAuthClientIdentity } from '../client/mcp-oauth-client-identity'
 import { McpOAuthClientEntity } from '../client/mcp-oauth-client.entity'
@@ -19,10 +20,15 @@ import { McpOAuthTokenEntity } from './mcp-oauth-token.entity'
 
 const repo = repoFactory(McpOAuthTokenEntity)
 const clientRepo = repoFactory(McpOAuthClientEntity)
+const userRepo = repoFactory(UserEntity)
 
 const DEFAULT_GRANT_PAGE_SIZE = 20
 const TOKEN_ALIAS = 'mcp_oauth_token'
 const UNKNOWN_CLIENT_KEY: McpOAuthClientKey = 'unknown'
+
+async function isUserActiveOnPlatform({ userId, platformId }: { userId: string, platformId: string }): Promise<boolean> {
+    return userRepo().existsBy({ id: userId, platformId, status: UserStatus.ACTIVE })
+}
 
 function generateRefreshToken(): string {
     return randomBytes(48).toString('base64url')
@@ -107,6 +113,10 @@ export const mcpOAuthTokenService = {
         if (record.clientId !== params.clientId) {
             throw new OAuthTokenError('invalid_grant', 'Client mismatch')
         }
+        const userActive = await isUserActiveOnPlatform({ userId: record.userId, platformId: record.platformId })
+        if (!userActive) {
+            throw new OAuthTokenError('invalid_grant', 'Invalid or expired refresh token')
+        }
 
         const clientKey = record.clientKey ?? mcpOAuthClientIdentity.detectClientKey({ redirectUris: params.redirectUris })
         await repo().update({ id: record.id }, {
@@ -149,6 +159,14 @@ export const mcpOAuthTokenService = {
             if (revoked) {
                 return { status: 'invalid' }
             }
+        }
+        const userActive = await tryCatch(() => isUserActiveOnPlatform({ userId: payload.sub, platformId: payload.platformId }))
+        if (userActive.error) {
+            log.error({ error: userActive.error }, 'Could not verify the MCP OAuth token user')
+            return { status: 'unavailable' }
+        }
+        if (!userActive.data) {
+            return { status: 'invalid' }
         }
         return { status: 'ok', payload }
     },
@@ -227,6 +245,16 @@ export const mcpOAuthTokenService = {
             })
         }
         const grantIds = matched.map((token) => token.id)
+        await repo().update({ id: In(grantIds) }, { revoked: true })
+        await mcpOAuthRevocationList.revoke({ grantIds })
+    },
+
+    async revokeAllForUser({ userId }: { userId: string }): Promise<void> {
+        const tokens = await repo().findBy({ userId, revoked: false })
+        if (tokens.length === 0) {
+            return
+        }
+        const grantIds = tokens.map((token) => token.id)
         await repo().update({ id: In(grantIds) }, { revoked: true })
         await mcpOAuthRevocationList.revoke({ grantIds })
     },

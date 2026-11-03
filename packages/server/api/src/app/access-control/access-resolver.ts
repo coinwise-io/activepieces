@@ -1,5 +1,5 @@
 import { isNil, unique } from '@activepieces/core-utils'
-import { AccessGrant, DefaultProjectRole, PlatformRole, Project, rolePermissions, User } from '@activepieces/shared'
+import { AccessGrant, DefaultProjectRole, PlatformRole, Project, rolePermissions, User, UserStatus } from '@activepieces/shared'
 import { repoFactory } from '../core/db/repo-factory'
 import { AccessGrantEntity } from './access-grant.entity'
 import { accessPolicy, ProjectAccess, ResolvedGrant } from './access-policy'
@@ -8,11 +8,11 @@ export const accessGrantRepo = repoFactory<AccessGrant>(AccessGrantEntity)
 
 export const accessResolver = {
     async resolve({ user, project }: ResolveParams): Promise<ProjectAccess | null> {
+        if (user.status !== UserStatus.ACTIVE || user.platformId !== project.platformId) {
+            return null
+        }
         if (user.id === project.ownerId) {
             return unrestricted({ userId: user.id, role: DefaultProjectRole.ADMIN })
-        }
-        if (user.platformId !== project.platformId) {
-            return null
         }
         switch (user.platformRole) {
             case PlatformRole.ADMIN:

@@ -414,6 +414,8 @@ export const flowService = (log: FastifyBaseLogger) => ({
                     folderId,
                 })
                 log.info({ flow: { id }, folderId }, 'Flow moved to folder')
+                const { websocketService } = await import('../../core/websockets.service')
+                await websocketService.refreshAccessForProject({ projectId, log })
                 break
             }
 
@@ -608,6 +610,8 @@ export const flowService = (log: FastifyBaseLogger) => ({
         })
         await flowExecutionCache(log).invalidate(id)
         await this.addDeleteFlowJob(flow)
+        const { websocketService } = await import('../../core/websockets.service')
+        await websocketService.refreshAccessForProject({ projectId, log })
         log.info({ flow: { id }, project: { id: projectId } }, 'Flow deletion requested')
         if (!isNil(deletedFlow)) {
             flowSideEffects(log).onDeleted({

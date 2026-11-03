@@ -5,6 +5,8 @@ import { FastifyPluginCallbackZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
 import { accessGuard } from '../access-control/access-guard'
+import { accessPolicy } from '../access-control/access-policy'
+import { hiddenReferenceGuard } from '../access-control/hidden-reference-guard'
 import { ProjectResourceType } from '../core/security/authorization/common'
 import { securityAccess } from '../core/security/authorization/fastify-security'
 import { applicationEvents } from '../helper/application-events'
@@ -14,6 +16,10 @@ import { variableService } from './variable.service'
 
 export const variableController: FastifyPluginCallbackZod = (app, _opts, done) => {
     app.post('/', CreateVariableRequest, async (request, reply) => {
+        const access = await accessGuard(request.log).forRequest({ request })
+        if (!accessPolicy.canOnProject({ access, capability: 'EDIT' })) {
+            await hiddenReferenceGuard.assertVariableNameFree({ access, projectId: request.projectId, name: request.body.name })
+        }
         const ownerId = await securityHelper.getUserIdFromRequest(request)
         const variable = await variableService(request.log).create({
             projectId: request.projectId,

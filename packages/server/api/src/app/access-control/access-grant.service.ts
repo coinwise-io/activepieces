@@ -17,7 +17,7 @@ import { In, IsNull } from 'typeorm'
 import { websocketService } from '../core/websockets.service'
 import { flowRepo } from '../flows/flow/flow.repo'
 import { folderRepo } from '../flows/folder/folder.service'
-import { userGroupRepo } from '../identity-provisioning/user-group/user-group.service'
+import { userGroupMemberRepo, userGroupRepo } from '../identity-provisioning/user-group/user-group.service'
 import { projectService } from '../project/project-service'
 import { userRepo } from '../user/user-service'
 import { accessPolicy, FlowRef, ProjectAccess } from './access-policy'
@@ -64,6 +64,7 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
         const target = await resolveTarget({ projectId, request })
         assertCanManage({ access, projectId, target })
         await assertPrincipalBelongsToPlatform({ platformId: project.platformId, principalType: request.principalType, principalId: request.principalId })
+        await assertNotSelfGrant({ access, projectId, principalType: request.principalType, principalId: request.principalId })
 
         const userId = request.principalType === AccessPrincipalType.USER ? request.principalId : null
         const groupId = request.principalType === AccessPrincipalType.GROUP ? request.principalId : null
@@ -167,6 +168,7 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
             })
         }
         const project = await projectService(log).getOneOrThrow(projectId)
+        const broadSearch = hasBroadPrincipalSearch({ access })
         const limit = access.unrestricted ? MAX_PRINCIPALS_PER_TYPE : MAX_PRINCIPALS_PER_TYPE_RESTRICTED
         if (!access.unrestricted && (isNil(search) || search.length < MIN_SEARCH_LENGTH_RESTRICTED)) {
             return []
@@ -187,7 +189,11 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
             .select('grp.id', 'id')
             .addSelect('grp.displayName', 'displayName')
             .where('grp."platformId" = :platformId', { platformId: project.platformId })
-        if (!isNil(pattern)) {
+        if (!broadSearch && !isNil(search)) {
+            usersQuery.andWhere('LOWER(identity.email) = LOWER(:exact)', { exact: search })
+            groupsQuery.andWhere('grp."displayName" = :exact', { exact: search })
+        }
+        else if (!isNil(pattern)) {
             usersQuery.andWhere('(identity.email ILIKE :pattern ESCAPE \'\\\' OR identity."firstName" ILIKE :pattern ESCAPE \'\\\' OR identity."lastName" ILIKE :pattern ESCAPE \'\\\' OR CONCAT(identity."firstName", \' \', identity."lastName") ILIKE :pattern ESCAPE \'\\\')', { pattern })
             groupsQuery.andWhere('grp."displayName" ILIKE :pattern ESCAPE \'\\\'', { pattern })
         }
@@ -267,6 +273,25 @@ function assertCanManage({ access, projectId, target }: { access: ProjectAccess,
     })
 }
 
+function hasBroadPrincipalSearch({ access }: { access: ProjectAccess }): boolean {
+    return access.unrestricted || accessPolicy.rolesOnProject({ access }).includes(AccessRole.EDITOR)
+}
+
+async function assertNotSelfGrant({ access, projectId, principalType, principalId }: AssertNotSelfGrantParams): Promise<void> {
+    if (hasBroadPrincipalSearch({ access }) || isNil(access.userId)) {
+        return
+    }
+    const grantsToSelf = principalType === AccessPrincipalType.USER
+        ? principalId === access.userId
+        : await userGroupMemberRepo().existsBy({ groupId: principalId, userId: access.userId })
+    accessPolicy.assertCan({
+        allowed: !grantsToSelf,
+        userId: access.userId,
+        projectId,
+        permission: Permission.WRITE_PROJECT,
+    })
+}
+
 async function assertPrincipalBelongsToPlatform({ platformId, principalType, principalId }: { platformId: string, principalType: AccessPrincipalType, principalId: string }): Promise<void> {
     const exists = principalType === AccessPrincipalType.USER
         ? await userRepo().existsBy({ id: principalId, platformId })
@@ -337,6 +362,13 @@ function isUniqueViolation(error: unknown): boolean {
 
 function escapeLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+type AssertNotSelfGrantParams = {
+    access: ProjectAccess
+    projectId: ProjectId
+    principalType: AccessPrincipalType
+    principalId: string
 }
 
 type ResolvedTarget = {

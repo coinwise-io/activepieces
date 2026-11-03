@@ -8,6 +8,14 @@ Entries here move to [Breaking Changes](/install/reference/breaking-changes) aut
 
 ## What has changed?
 
+#### MCP follows access grants, and the project MCP token becomes read-only
+
+MCP clients connected through OAuth act as the person who connected them: they only see and run the flows that person may run, and project-wide tools need a project-wide role. Clients that use the project's MCP token have no user behind them, so they can still read but can no longer run flows or change anything.
+
+#### What you need to do
+
+- Reconnect MCP clients that run flows or make changes with OAuth (for example the Claude connector), signing in as a user who has access to those flows.
+
 #### Sign-in follows the platform settings, and password sign-ins need two-factor once SSO is on
 
 Sign-in now respects **Email sign-in** and the allowed domains on every edition. SAML works only after the SSO domain is verified with a DNS TXT record, and only for emails in that domain. Once SAML is configured and the domain is verified, turning email sign-in off applies only to that domain: accounts on other domains keep their password (break-glass accounts), and every password or emailed-code sign-in must use an authenticator app (TOTP), enrolling on the next sign-in if needed.

@@ -1,6 +1,6 @@
-import { ActivepiecesError, apId, ApId, Cursor, ErrorCode, FlowId, FlowRunId, FlowVersionId, isEmpty, isNil, PlatformId, ProjectId, SeekPage } from '@activepieces/core-utils'
+import { ActivepiecesError, apId, ApId, Cursor, ErrorCode, FlowId, FlowRunId, FlowVersionId, isEmpty, isManualPieceTrigger, isNil, PlatformId, ProjectId, SeekPage } from '@activepieces/core-utils'
 import { apDayjs, apDayjsDuration, wideEvent } from '@activepieces/server-utils'
-import { ExecuteFlowJobData, ExecutionType, ExecutioOutputFile, FAILED_STATES, FileCompression, FileType, FlowRetryStrategy, FlowRun, FlowRunCountByStatus, FlowRunStatus, FlowRunWithRetryError, flowStructureUtil, FlowVersion, GenericStepOutput, isFlowRunStateTerminal, JobPayload, LATEST_JOB_DATA_SCHEMA_VERSION, logSerializer, LogSliceRef, ResumeReason, RunEnvironment, RunInternalError, SampleDataFileType, StepOutput, StepOutputStatus, StepOutputType, StreamStepProgress, WorkerJobType } from '@activepieces/shared'
+import { ExecuteFlowJobData, ExecutionType, ExecutioOutputFile, FAILED_STATES, FileCompression, FileType, Flow, FlowRetryStrategy, FlowRun, FlowRunCountByStatus, FlowRunStatus, FlowRunWithRetryError, FlowStatus, flowStructureUtil, FlowTriggerType, FlowVersion, GenericStepOutput, isFlowRunStateTerminal, JobPayload, LATEST_JOB_DATA_SCHEMA_VERSION, logSerializer, LogSliceRef, ResumeReason, RunEnvironment, RunInternalError, SampleDataFileType, StepOutput, StepOutputStatus, StepOutputType, StreamStepProgress, WorkerJobType } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import pLimit from 'p-limit'
 import { ArrayContains, In, IsNull, Not, Repository, SelectQueryBuilder } from 'typeorm'
@@ -437,9 +437,12 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             }) : undefined,
         }, log)
     },
-    async startManualTrigger({ projectId, flowVersionId, triggeredBy }: StartManualTriggerParams): Promise<FlowRun> {
+    async startManualTrigger({ projectId, flowVersionId, triggeredBy, restrictToPublished }: StartManualTriggerParams): Promise<FlowRun> {
         const flowVersion = await flowVersionService(log).getOneOrThrow(flowVersionId)
-        await flowService(log).getOneOrThrow({ id: flowVersion.flowId, projectId })
+        const flow = await flowService(log).getOneOrThrow({ id: flowVersion.flowId, projectId })
+        if (restrictToPublished) {
+            assertPublishedManualRun({ flow, flowVersion })
+        }
         const triggerPayload = {}
         const platformId = await projectService(log).getPlatformId(projectId)
 
@@ -578,6 +581,20 @@ export async function cancelSingleRun(log: FastifyBaseLogger, flowRun: FlowRun, 
         flowRun: { id: flowRun.id },
         flow: { id: flowRun.flowId },
     }, 'Flow run cancelled')
+}
+
+function assertPublishedManualRun({ flow, flowVersion }: { flow: Flow, flowVersion: FlowVersion }): void {
+    const trigger = flowVersion.trigger
+    const isManualTrigger = trigger.type === FlowTriggerType.PIECE
+        && !isNil(trigger.settings.triggerName)
+        && isManualPieceTrigger({ pieceName: trigger.settings.pieceName, triggerName: trigger.settings.triggerName })
+    const runnable = flow.status === FlowStatus.ENABLED && flow.publishedVersionId === flowVersion.id && isManualTrigger
+    if (!runnable) {
+        throw new ActivepiecesError({
+            code: ErrorCode.ENTITY_NOT_FOUND,
+            params: { entityType: 'flow_version', entityId: flowVersion.id },
+        })
+    }
 }
 
 async function getAllChildRuns(parentRunIds: string[]): Promise<FlowRun[]> {
@@ -985,6 +1002,7 @@ type StartManualTriggerParams = {
     projectId: ProjectId
     flowVersionId: FlowVersionId
     triggeredBy: string
+    restrictToPublished: boolean
 }
 type RetryParams = {
     flowRunId: FlowRunId

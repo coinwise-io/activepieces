@@ -4,6 +4,7 @@ import dayjs from 'dayjs'
 import { FastifyBaseLogger } from 'fastify'
 import { nanoid } from 'nanoid'
 import { EntityManager, In, IsNull } from 'typeorm'
+import { accessGrantRepo } from '../access-control/access-resolver'
 import { userIdentityRepository, userIdentityService } from '../authentication/user-identity/user-identity-service'
 import { repoFactory } from '../core/db/repo-factory'
 import { transaction } from '../core/db/transaction'
@@ -11,6 +12,7 @@ import { flowRepo } from '../flows/flow/flow.repo'
 import { flowService } from '../flows/flow/flow.service'
 import { buildPaginator } from '../helper/pagination/build-paginator'
 import { paginationHelper } from '../helper/pagination/pagination-utils'
+import { userGroupMemberRepo } from '../identity-provisioning/user-group/user-group.service'
 import { platformService } from '../platform/platform.service'
 import { projectRepo } from '../project/project-repo'
 import { projectService } from '../project/project-service'
@@ -112,6 +114,9 @@ export const userService = (log: FastifyBaseLogger) => ({
         })
 
         await applyUpdate()
+        if (status === UserStatus.INACTIVE) {
+            await revokeMcpAccess({ userId: id })
+        }
         if (!isNil(status) || !isNil(platformRole)) {
             await refreshSocketAccess({ userIds: [id], log })
         }
@@ -189,6 +194,7 @@ export const userService = (log: FastifyBaseLogger) => ({
         if (isNil(user)) {
             return
         }
+        await revokeMcpAccess({ userId: id })
         await deletePersonalProjectForUser({ userId: id, platformId, log })
         await transaction(async (entityManager) => {
             await userRepo(entityManager).delete({
@@ -203,12 +209,17 @@ export const userService = (log: FastifyBaseLogger) => ({
         await assertNotPlatformOwner({ id, platformId, log })
         const user = await this.getOneOrFail({ id })
         await deletePersonalProjectForUser({ userId: id, platformId, log })
-        await userRepo().update({
-            id,
-            platformId,
-        }, {
-            platformId: null,
+        await transaction(async (entityManager) => {
+            await accessGrantRepo(entityManager).delete({ userId: id, platformId })
+            await userGroupMemberRepo(entityManager).delete({ userId: id })
+            await userRepo(entityManager).update({
+                id,
+                platformId,
+            }, {
+                platformId: null,
+            })
         })
+        await revokeMcpAccess({ userId: id })
         await userIdentityRepository().update(user.identityId, {
             tokenVersion: nanoid(),
         })
@@ -300,6 +311,11 @@ export function mapToUserWithMetaInformation(user: (User & { identity?: UserIden
 async function refreshSocketAccess({ userIds, log }: { userIds: UserId[], log: FastifyBaseLogger }): Promise<void> {
     const { websocketService } = await import('../core/websockets.service')
     await websocketService.refreshAccessForUsers({ userIds, log })
+}
+
+async function revokeMcpAccess({ userId }: { userId: UserId }): Promise<void> {
+    const { mcpOAuthTokenService } = await import('../mcp/oauth/token/mcp-oauth-token.service')
+    await mcpOAuthTokenService.revokeAllForUser({ userId })
 }
 
 async function assertNotPlatformOwner({ id, platformId, log }: DeleteParams & { log: FastifyBaseLogger }): Promise<void> {

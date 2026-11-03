@@ -1,6 +1,7 @@
 import { Permission, PrincipalType, TestFlowRunRequestBody, WebsocketClientEvent, WebsocketServerEvent } from '@activepieces/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { accessGuard } from '../access-control/access-guard'
+import { accessPolicy } from '../access-control/access-policy'
 import { websocketService } from '../core/websockets.service'
 import { flowVersionController } from './flow/flow-version.controller'
 import { flowController } from './flow/flow.controller'
@@ -31,8 +32,9 @@ export const flowModule: FastifyPluginAsyncZod = async (app) => {
     websocketService.addListener(PrincipalType.USER, WebsocketServerEvent.MANUAL_TRIGGER_RUN_STARTED, (socket) => {
         return async (data: TestFlowRunRequestBody, principal, projectId) => {
             const guard = accessGuard(app.log)
-            await guard.assertFlowByVersionId({
-                access: await guard.forUser({ userId: principal.id, projectId }),
+            const access = await guard.forUser({ userId: principal.id, projectId })
+            const flow = await guard.assertFlowByVersionId({
+                access,
                 projectId,
                 flowVersionId: data.flowVersionId,
                 capability: 'EXECUTE',
@@ -42,6 +44,7 @@ export const flowModule: FastifyPluginAsyncZod = async (app) => {
                 projectId,
                 flowVersionId: data.flowVersionId,
                 triggeredBy: principal.id,
+                restrictToPublished: !accessPolicy.canOnFlow({ access, flow, capability: 'EDIT' }),
             })
             socket.emit(WebsocketClientEvent.MANUAL_TRIGGER_RUN_STARTED, flowRun)
         }

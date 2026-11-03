@@ -1,4 +1,4 @@
-import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, ProjectId, SeekPage } from '@activepieces/core-utils'
+import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, Permission, ProjectId, SeekPage } from '@activepieces/core-utils'
 import { CreateFolderRequest, Folder, FolderDto, FolderId, UpdateFolderRequest } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { accessPolicy, ProjectAccess } from '../../access-control/access-policy'
@@ -12,6 +12,11 @@ import { FolderEntity } from './folder.entity'
 
 export const folderRepo = repoFactory(FolderEntity)
 
+async function refreshSocketAccess({ projectId, log }: { projectId: ProjectId, log: FastifyBaseLogger }): Promise<void> {
+    const { websocketService } = await import('../../core/websockets.service')
+    await websocketService.refreshAccessForProject({ projectId, log })
+}
+
 export const flowFolderService = (log: FastifyBaseLogger) => ({
     async delete(params: DeleteParams): Promise<void> {
         const { projectId, folderId } = params
@@ -20,6 +25,7 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             id: folder.id,
             projectId,
         })
+        await refreshSocketAccess({ projectId, log })
     },
     async update(params: UpdateParams): Promise<FolderDto> {
         const { projectId, folderId, request } = params
@@ -103,6 +109,7 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             return
         }
         await folderRepo().delete({ id: existing.id, projectId })
+        await refreshSocketAccess({ projectId, log })
     },
     async list(params: ListParams): Promise<SeekPage<FolderDto>> {
         const { projectId, cursorRequest, limit, access } = params
@@ -128,10 +135,12 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
                     .where('flow."folderId" = folder.id')
                 return isNil(visibleFlows) ? countQuery : countQuery.andWhere(visibleFlows.sql, visibleFlows.params)
             }, 'numberOfFlows')
-            .addSelect((subQuery) => subQuery
-                .select('COUNT(*)::int')
-                .from('table', 'tbl')
-                .where('tbl."folderId" = folder.id'), 'numberOfTables')
+            .addSelect(
+                canSeeTables({ access })
+                    ? '(SELECT COUNT(*)::int FROM "table" tbl WHERE tbl."folderId" = folder.id)'
+                    : '0',
+                'numberOfTables',
+            )
 
         if (!isNil(access)) {
             accessPolicy.applyFolderScope({ queryBuilder, access, folderAlias: 'folder', projectId })
@@ -163,7 +172,7 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
         }
         const [numberOfFlows, numberOfTables] = await Promise.all([
             flowService(log).count({ projectId, folderId, access: access?.unrestricted ? undefined : access }),
-            tableService.count({ projectId, folderId }),
+            canSeeTables({ access }) ? tableService.count({ projectId, folderId }) : Promise.resolve(0),
         ])
         return {
             ...folder,
@@ -172,6 +181,10 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
         }
     },
 })
+
+function canSeeTables({ access }: { access: ProjectAccess | undefined }): boolean {
+    return isNil(access) || access.unrestricted || accessPolicy.projectScopePermissions({ access }).includes(Permission.READ_TABLE)
+}
 
 async function assertFolderVisible({ access, projectId, folderId }: { access: ProjectAccess, projectId: ProjectId, folderId: FolderId }): Promise<void> {
     const queryBuilder = folderRepo()

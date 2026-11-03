@@ -129,21 +129,24 @@ describe('Access grants hardening', () => {
         expect(hiddenTarget.statusCode).toBe(StatusCodes.NOT_FOUND)
     })
 
-    it('restricts principal search for narrow editors to 3 characters and 20 results', async () => {
-        const { admin, memberOne } = await accessTestUtils.setup(app)
+    it('restricts principal search to 3 characters and 20 results for project editors and to exact matches for narrow editors', async () => {
+        const { admin, memberOne, memberTwo } = await accessTestUtils.setup(app)
         const flow = await accessTestUtils.createFlow({ ctx: admin })
         await accessTestUtils.grantToUser({ ctx: admin, member: memberOne, role: AccessRole.EDITOR, flowId: flow.id })
+        await accessTestUtils.grantToUser({ ctx: admin, member: memberTwo, role: AccessRole.EDITOR })
         const needle = `grp${apId().toLowerCase().replace(/[^a-z0-9]/g, '')}`
         await Promise.all(Array.from({ length: 25 }, (_, index) => accessTestUtils.createGroup({ platformId: admin.platform.id, displayName: `${needle}-${index}`, memberIds: [] })))
 
-        const empty = await memberOne.get('/v1/access-grants/principals', { projectId: admin.project.id })
-        const short = await memberOne.get('/v1/access-grants/principals', { projectId: admin.project.id, search: 'gr' })
-        const narrow = await memberOne.get('/v1/access-grants/principals', { projectId: admin.project.id, search: needle })
+        const empty = await memberTwo.get('/v1/access-grants/principals', { projectId: admin.project.id })
+        const short = await memberTwo.get('/v1/access-grants/principals', { projectId: admin.project.id, search: 'gr' })
+        const narrow = await memberTwo.get('/v1/access-grants/principals', { projectId: admin.project.id, search: needle })
+        const narrowEditor = await memberOne.get('/v1/access-grants/principals', { projectId: admin.project.id, search: needle })
         const asAdmin = await admin.get('/v1/access-grants/principals', { projectId: admin.project.id, search: needle })
 
         expect(empty.json().data).toEqual([])
         expect(short.json().data).toEqual([])
         expect(narrow.json().data).toHaveLength(20)
+        expect(narrowEditor.json().data).toEqual([])
         expect(asAdmin.json().data).toHaveLength(25)
     })
 })

@@ -8,6 +8,7 @@ import { ArrayContains } from 'typeorm'
 import { z } from 'zod'
 import { accessGuard } from '../access-control/access-guard'
 import { accessPolicy } from '../access-control/access-policy'
+import { hiddenReferenceGuard } from '../access-control/hidden-reference-guard'
 import { ProjectResourceType } from '../core/security/authorization/common'
 import { securityAccess } from '../core/security/authorization/fastify-security'
 import { applicationEvents } from '../helper/application-events'
@@ -212,6 +213,7 @@ async function assertCanUpsert({ request, projectId, externalId }: { request: Fa
         projectId,
         permission: Permission.WRITE_APP_CONNECTION,
     })
+    await hiddenReferenceGuard.assertConnectionExternalIdFree({ access, projectId, externalId })
 }
 
 const DEFAULT_PAGE_SIZE = 10
