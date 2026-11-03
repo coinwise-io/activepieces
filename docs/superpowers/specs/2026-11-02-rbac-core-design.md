@@ -31,7 +31,7 @@ Platform admins and the owner of a project keep full access, as today. Platform 
 - **Executors can read the flow definition.** They need to see what they are about to run, and the definition holds no secret values, only connection references. (my call)
 - **Narrow grants give a narrow project view.** A member with grants only on some flows can open the project and sees only those flows and their runs. Project-wide pages (connections, variables, tables, agents, settings) need a project-scope grant. The exception is editors at folder or flow scope: they can list and pick the project's connections and variables to build their flows, and create new ones. Project 4 makes those values write-only. (my call)
 - **Who manages grants.** Platform admins, the project owner, and editors whose scope covers the target (a folder editor can grant on that folder and its flows). Grantees must belong to the same platform. Project 3 will lock grant changes on published flows behind two-person approval.
-- **Executing is a new permission, `EXECUTE_FLOW`.** In this project it guards the in-app ways to start or retry a run. Forms, webhooks and MCP agents start enforcing it in project 5, together with system users.
+- **Executing is a new permission, `EXECUTE_FLOW`.** In this project it guards the in-app ways to start or retry a run and MCP flow tools. Forms and webhooks start enforcing it in project 5, together with system users.
 - **No custom roles.** Three fixed roles cover the requirements. Custom roles can come later without changing the table.
 
 ## How it is enforced
@@ -41,7 +41,8 @@ Platform admins and the owner of a project keep full access, as today. Platform 
 3. **Flows.** Listing returns only flows the caller can see. Reading needs any role on the flow. Changing, publishing, enabling, moving or deleting needs editor on the flow. Creating needs editor on the project, or on the target folder.
 4. **Runs.** Listing returns every run of flows where the caller is editor or history reader, plus the runs the caller started (`flow_run.triggeredBy`) on flows where they are executor. Reading one run follows the same rule. Retrying needs editor, or executor on their own run.
 5. **Folders.** Members see folders that hold a flow they can see, or that they have a grant on. Creating, renaming and deleting folders needs editor on the project.
-6. **UI.** The web app asks the server for the caller's effective permissions in the current project, and for each flow, and gates buttons and pages with them. Today `checkAccess` always answers yes in this edition; it starts answering for real.
+6. **MCP.** MCP tokens are issued per user through OAuth, so every MCP call carries the person who connected the client (for example the Claude connector). The same rules apply there: a person only sees as tools the flows they may run, running one needs `EXECUTE_FLOW` on that flow, the run is recorded as started by them, and project-wide tools need a project-scope role. Projects without a grant cannot be selected. MCP calls without a user get no flow execution or writes until system users arrive in project 5. (added at the user's request)
+7. **UI.** The web app asks the server for the caller's effective permissions in the current project, and for each flow, and gates buttons and pages with them. Today `checkAccess` always answers yes in this edition; it starts answering for real.
 
 ## Managing access
 
@@ -52,5 +53,5 @@ Platform admins and the owner of a project keep full access, as today. Platform 
 
 - Two-person approval of grant changes and publishing on published flows (project 3).
 - Write-only secrets and masking in logs (project 4).
-- Enforcing `EXECUTE_FLOW` on forms, webhooks and MCP, and system users (project 5).
+- Enforcing `EXECUTE_FLOW` on forms and webhooks, and system users (project 5).
 - Tables, agents and knowledge bases get no per-item grants. They stay project-wide.

@@ -277,6 +277,10 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             throw canceChildlPromises.find(r => r.status === 'rejected')!.reason
         }
     },
+    async getTriggeredBy({ runId, projectId }: { runId: FlowRunId, projectId: ProjectId }): Promise<string | null> {
+        const run = await flowRunRepo().findOne({ select: { id: true, triggeredBy: true }, where: { id: runId, projectId } })
+        return run?.triggeredBy ?? null
+    },
     async existsBy(runId: FlowRunId): Promise<boolean> {
         return flowRunRepo().existsBy({ id: runId })
     },

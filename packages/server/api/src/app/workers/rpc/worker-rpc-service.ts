@@ -26,6 +26,7 @@ import { dedupeService } from '../../trigger/dedupe-service'
 import { triggerEventService } from '../../trigger/trigger-events/trigger-event.service'
 import { triggerRunStats } from '../../trigger/trigger-run/trigger-run-stats'
 import { triggerSourceService } from '../../trigger/trigger-source/trigger-source-service'
+import { webhookRunOwner } from '../../webhooks/webhook-run-owner'
 import { jobBroker } from '../job-queue/job-broker'
 import { machineService } from '../machine/machine-service'
 import { WorkerGroupAssignment } from '../worker-groups/worker-group-queues'
@@ -116,6 +117,7 @@ export function createHandlers(log: FastifyBaseLogger, assignment: WorkerGroupAs
                 log: log.child({ rpc: 'submitPayloads', flowVersion: { id: flowVersionId } }),
             })
 
+            const triggeredBy = await webhookRunOwner.recall({ requestId: httpRequestId })
             const flowRuns = await Promise.all(
                 filterPayloads.map((payload) =>
                     creditsExhausted
@@ -142,6 +144,7 @@ export function createHandlers(log: FastifyBaseLogger, assignment: WorkerGroupAs
                             executeTrigger: false,
                             parentRunId,
                             failParentOnFailure,
+                            triggeredBy,
                         }),
                 ),
             )

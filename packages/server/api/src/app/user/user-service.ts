@@ -112,6 +112,10 @@ export const userService = (log: FastifyBaseLogger) => ({
         })
 
         await applyUpdate()
+        if (!isNil(status) || !isNil(platformRole)) {
+            const { websocketService } = await import('../core/websockets.service')
+            await websocketService.refreshAccessForUsers({ userIds: [id], log })
+        }
 
         return this.getMetaInformation({ id })
     },

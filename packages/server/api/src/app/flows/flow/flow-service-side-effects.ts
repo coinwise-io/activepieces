@@ -111,7 +111,7 @@ export const flowSideEffects = (log: FastifyBaseLogger) => ({
         const { error } = await tryCatch(async () => {
             const { websocketService } = await import('../../core/websockets.service')
             const event: FlowDraftUpdatedEvent = { flowId, editorSessionId }
-            websocketService.to(projectId).emit(WebsocketClientEvent.FLOW_DRAFT_UPDATED, event)
+            websocketService.toResourceAudience({ projectId, resourceId: flowId }).emit(WebsocketClientEvent.FLOW_DRAFT_UPDATED, event)
         })
         if (!isNil(error)) {
             log.error({ error, flow: { id: flowId }, project: { id: projectId } }, '[flowSideEffects#onDraftWritten] Could not send the Draft Push, the write is kept')

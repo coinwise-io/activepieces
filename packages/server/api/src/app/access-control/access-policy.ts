@@ -81,6 +81,13 @@ function permissionsForGrants({ grants }: { grants: ResolvedGrant[] }): Permissi
     return unique([...projectPermissions, ...narrowPermissions])
 }
 
+function projectScopePermissions({ access }: { access: ProjectAccess }): Permission[] {
+    if (access.unrestricted) {
+        return access.permissions
+    }
+    return permissionsForGrants({ grants: access.grants.filter(isProjectScope) })
+}
+
 function rolesOnProject({ access }: { access: ProjectAccess }): AccessRole[] {
     if (access.unrestricted) {
         return [AccessRole.EDITOR]
@@ -201,19 +208,32 @@ function flowScopeCondition({ scope, flowIdColumn, flowTable, projectId, prefix 
     }
 }
 
-function applyFlowScope<T extends ObjectLiteral>({ queryBuilder, access, flowAlias, capability }: ApplyFlowScopeParams<T>): void {
+function flowCapabilityCondition({ access, flowAlias, capability }: { access: ProjectAccess, flowAlias: string, capability: Capability }): Condition | null {
     if (access.unrestricted) {
-        return
+        return null
     }
     const scope = scopeFor({ access, roles: CAPABILITY_ROLES[capability] })
     if (scope.projectWide) {
-        return
+        return null
     }
     const clauses = [
         ...(scope.flowIds.length > 0 ? [{ sql: `${flowAlias}."id" IN (:...scopeFlowIds)`, params: { scopeFlowIds: scope.flowIds } }] : []),
         ...(scope.folderIds.length > 0 ? [{ sql: `${flowAlias}."folderId" IN (:...scopeFolderIds)`, params: { scopeFolderIds: scope.folderIds } }] : []),
     ]
-    queryBuilder.andWhere(buildBrackets({ clauses }))
+    if (clauses.length === 0) {
+        return { sql: '1 = 0', params: {} }
+    }
+    return {
+        sql: `(${clauses.map((clause) => clause.sql).join(' OR ')})`,
+        params: Object.assign({}, ...clauses.map((clause) => clause.params)),
+    }
+}
+
+function applyFlowScope<T extends ObjectLiteral>({ queryBuilder, access, flowAlias, capability }: ApplyFlowScopeParams<T>): void {
+    const condition = flowCapabilityCondition({ access, flowAlias, capability })
+    if (!isNil(condition)) {
+        queryBuilder.andWhere(condition.sql, condition.params)
+    }
 }
 
 function applyRunScope<T extends ObjectLiteral>({ queryBuilder, access, runAlias, projectId, scope }: ApplyRunScopeParams<T>): void {
@@ -299,6 +319,7 @@ export const accessPolicy = {
     isProjectScope,
     scopeOf,
     permissionsForGrants,
+    projectScopePermissions,
     rolesOnProject,
     rolesOnFolder,
     rolesOnFlow,
@@ -313,6 +334,7 @@ export const accessPolicy = {
     canManageAccess,
     canManageAccessAnywhere,
     applyFlowScope,
+    flowCapabilityCondition,
     applyRunScope,
     applyFolderScope,
     assertCan,

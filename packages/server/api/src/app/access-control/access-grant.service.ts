@@ -14,6 +14,7 @@ import {
 } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { In, IsNull } from 'typeorm'
+import { websocketService } from '../core/websockets.service'
 import { flowRepo } from '../flows/flow/flow.repo'
 import { folderRepo } from '../flows/folder/folder.service'
 import { userGroupRepo } from '../identity-provisioning/user-group/user-group.service'
@@ -23,11 +24,13 @@ import { accessPolicy, FlowRef, ProjectAccess } from './access-policy'
 import { accessGrantRepo } from './access-resolver'
 
 const MAX_PRINCIPALS_PER_TYPE = 50
+const MAX_PRINCIPALS_PER_TYPE_RESTRICTED = 20
+const MIN_SEARCH_LENGTH_RESTRICTED = 3
 
 export const accessGrantService = (log: FastifyBaseLogger) => ({
     async list({ projectId, access, request }: ListParams): Promise<AccessGrantWithPrincipal[]> {
         const target = await resolveTarget({ projectId, request })
-        assertCanSeeTarget({ access, projectId, target })
+        assertCanManage({ access, projectId, target })
         const queryBuilder = accessGrantRepo()
             .createQueryBuilder('ag')
             .where('ag."projectId" = :projectId', { projectId })
@@ -101,6 +104,7 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
         }
         const saved = await accessGrantRepo().findOneByOrFail({ id: newGrant.id, projectId })
         const [withPrincipal] = await withPrincipals({ grants: [saved] })
+        await websocketService.refreshAccessForProject({ projectId, log })
         log.info({ project: { id: projectId }, accessGrant: { id: saved.id, role: saved.role } }, 'Access grant created')
         return withPrincipal
     },
@@ -119,6 +123,7 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
         })
         assertCanManage({ access, projectId, target })
         await accessGrantRepo().delete({ id, projectId })
+        await websocketService.refreshAccessForProject({ projectId, log })
         log.info({ project: { id: projectId }, accessGrant: { id } }, 'Access grant deleted')
     },
 
@@ -131,6 +136,7 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
         }
         if (!isNil(folderId)) {
             const target = await resolveTarget({ projectId, request: { projectId, folderId } })
+            assertTargetNotHidden({ access, target })
             return {
                 roles: accessPolicy.rolesOnFolder({ access, folderId }),
                 permissions: accessPolicy.permissionsOnFolder({ access, folderId }),
@@ -145,6 +151,7 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
             }
         }
         const flow = await loadFlowRef({ projectId, flowId })
+        assertTargetNotHidden({ access, target: { scope: AccessGrantScope.FLOW, folderId: null, flow } })
         return {
             roles: accessPolicy.rolesOnFlow({ access, flow }),
             permissions: accessPolicy.permissionsOnFlow({ access, flow }),
@@ -160,6 +167,10 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
             })
         }
         const project = await projectService(log).getOneOrThrow(projectId)
+        const limit = access.unrestricted ? MAX_PRINCIPALS_PER_TYPE : MAX_PRINCIPALS_PER_TYPE_RESTRICTED
+        if (!access.unrestricted && (isNil(search) || search.length < MIN_SEARCH_LENGTH_RESTRICTED)) {
+            return []
+        }
         const pattern = isNil(search) || search.length === 0 ? null : `%${escapeLike(search)}%`
 
         const usersQuery = userRepo()
@@ -181,8 +192,8 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
             groupsQuery.andWhere('grp."displayName" ILIKE :pattern ESCAPE \'\\\'', { pattern })
         }
         const [users, groups] = await Promise.all([
-            usersQuery.orderBy('identity.email', 'ASC').limit(MAX_PRINCIPALS_PER_TYPE).getRawMany<UserRow>(),
-            groupsQuery.orderBy('grp."displayName"', 'ASC').limit(MAX_PRINCIPALS_PER_TYPE).getRawMany<GroupRow>(),
+            usersQuery.orderBy('identity.email', 'ASC').limit(limit).getRawMany<UserRow>(),
+            groupsQuery.orderBy('grp."displayName"', 'ASC').limit(limit).getRawMany<GroupRow>(),
         ])
         return [
             ...users.map((row): AccessGrantPrincipal => ({ type: AccessPrincipalType.USER, id: row.id, email: row.email, firstName: row.firstName, lastName: row.lastName })),
@@ -226,16 +237,28 @@ async function loadFlowRef({ projectId, flowId }: { projectId: ProjectId, flowId
     return { id: flow.id, folderId: flow.folderId ?? null }
 }
 
-function assertCanSeeTarget({ access, projectId, target }: { access: ProjectAccess, projectId: ProjectId, target: ResolvedTarget }): void {
-    const allowed = !isNil(target.flow)
-        ? accessPolicy.canOnFlow({ access, flow: target.flow, capability: 'SEE' })
-        : !isNil(target.folderId)
-            ? accessPolicy.canOnFolder({ access, folderId: target.folderId, capability: 'SEE' })
-            : accessPolicy.canOnProject({ access, capability: 'SEE' })
-    accessPolicy.assertCan({ allowed, userId: access.userId, projectId, permission: Permission.READ_PROJECT })
+function rolesOnTarget({ access, target }: { access: ProjectAccess, target: ResolvedTarget }): AccessRole[] {
+    if (!isNil(target.flow)) {
+        return accessPolicy.rolesOnFlow({ access, flow: target.flow })
+    }
+    if (!isNil(target.folderId)) {
+        return accessPolicy.rolesOnFolder({ access, folderId: target.folderId })
+    }
+    return accessPolicy.rolesOnProject({ access })
+}
+
+function assertTargetNotHidden({ access, target }: { access: ProjectAccess, target: ResolvedTarget }): void {
+    const hidden = !access.unrestricted && target.scope !== AccessGrantScope.PROJECT && rolesOnTarget({ access, target }).length === 0
+    if (hidden) {
+        throw new ActivepiecesError({
+            code: ErrorCode.ENTITY_NOT_FOUND,
+            params: { entityId: target.flow?.id ?? target.folderId ?? '', entityType: target.scope === AccessGrantScope.FLOW ? 'flow' : 'folder' },
+        })
+    }
 }
 
 function assertCanManage({ access, projectId, target }: { access: ProjectAccess, projectId: ProjectId, target: ResolvedTarget }): void {
+    assertTargetNotHidden({ access, target })
     accessPolicy.assertCan({
         allowed: accessPolicy.canManageAccess({ access, target: { folderId: target.folderId, flow: target.flow } }),
         userId: access.userId,

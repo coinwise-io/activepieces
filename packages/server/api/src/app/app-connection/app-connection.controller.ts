@@ -1,20 +1,25 @@
 import { ApId, Permission, SeekPage } from '@activepieces/core-utils'
 import { wideEvent } from '@activepieces/server-utils'
 import { ActivepiecesError, AppConnectionOwners, AppConnectionScope, AppConnectionStatus, AppConnectionType, AppConnectionWithoutSensitiveData, ApplicationEventName, ErrorCode, GetOAuth2AuthorizationUrlRequestBody, GetOAuth2AuthorizationUrlResponse, ListAppConnectionOwnersRequestQuery, ListAppConnectionsRequestQuery, PLACEHOLDER_CONNECTION_TYPE, PrincipalType, ReplaceAppConnectionsRequestBody, SERVICE_KEY_SECURITY_OPENAPI, UpdateConnectionValueRequestBody, UpsertAppConnectionRequestBody } from '@activepieces/shared'
+import { FastifyRequest } from 'fastify'
 import { FastifyPluginCallbackZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
+import { ArrayContains } from 'typeorm'
 import { z } from 'zod'
+import { accessGuard } from '../access-control/access-guard'
+import { accessPolicy } from '../access-control/access-policy'
 import { ProjectResourceType } from '../core/security/authorization/common'
 import { securityAccess } from '../core/security/authorization/fastify-security'
 import { applicationEvents } from '../helper/application-events'
 import { auditEvents } from '../helper/audit-events'
 import { securityHelper } from '../helper/security-helper'
-import { appConnectionService } from './app-connection-service/app-connection-service'
+import { appConnectionService, appConnectionsRepo } from './app-connection-service/app-connection-service'
 import { oauth2Util } from './app-connection-service/oauth2/oauth2-util'
 import { AppConnectionEntity } from './app-connection.entity'
 
 export const appConnectionController: FastifyPluginCallbackZod = (app, _opts, done) => {
     app.post('/', UpsertAppConnectionRequest, async (request, reply) => {
+        await assertCanUpsert({ request, projectId: request.projectId, externalId: request.body.externalId })
         const ownerId = await securityHelper.getUserIdFromRequest(request)
         const baseUpsert = {
             platformId: request.principal.platform.id,
@@ -51,6 +56,7 @@ export const appConnectionController: FastifyPluginCallbackZod = (app, _opts, do
     })
 
     app.post('/:id', UpdateConnectionValueRequest, async (request) => {
+        await assertProjectEditor({ request })
         const appConnection = await appConnectionService(request.log).update({
             id: request.params.id,
             platformId: request.principal.platform.id,
@@ -105,6 +111,7 @@ export const appConnectionController: FastifyPluginCallbackZod = (app, _opts, do
     })
 
     app.post('/:id/revalidate', RevalidateAppConnectionRequest, async (request): Promise<AppConnectionWithoutSensitiveData> => {
+        await assertProjectEditor({ request })
         return appConnectionService(request.log).revalidate({
             id: request.params.id,
             platformId: request.principal.platform.id,
@@ -126,6 +133,7 @@ export const appConnectionController: FastifyPluginCallbackZod = (app, _opts, do
     )
 
     app.post('/replace', ReplaceAppConnectionsRequest, async (request, reply) => {
+        await assertProjectEditor({ request })
         const { sourceAppConnectionId, targetAppConnectionId, deleteSourceConnection, applyToPublishedVersions } = request.body
         await appConnectionService(request.log).replace({
             sourceAppConnectionId,
@@ -140,6 +148,7 @@ export const appConnectionController: FastifyPluginCallbackZod = (app, _opts, do
     })
 
     app.delete('/:id', DeleteAppConnectionRequest, async (request, reply): Promise<void> => {
+        await assertProjectEditor({ request })
         const connection = await appConnectionService(request.log).getOneOrThrowWithoutValue({
             id: request.params.id,
             platformId: request.principal.platform.id,
@@ -180,6 +189,29 @@ export const appConnectionController: FastifyPluginCallbackZod = (app, _opts, do
         })
     })
     done()
+}
+
+async function assertProjectEditor({ request }: { request: FastifyRequest }): Promise<void> {
+    await accessGuard(request.log).assertProjectForRequest({ request, capability: 'EDIT', permission: Permission.WRITE_APP_CONNECTION })
+}
+
+async function assertCanUpsert({ request, projectId, externalId }: { request: FastifyRequest, projectId: string, externalId: string }): Promise<void> {
+    const guard = accessGuard(request.log)
+    const access = await guard.forRequest({ request })
+    if (accessPolicy.canOnProject({ access, capability: 'EDIT' })) {
+        return
+    }
+    const exists = await appConnectionsRepo().existsBy({
+        externalId,
+        platformId: request.principal.platform.id,
+        projectIds: ArrayContains([projectId]),
+    })
+    accessPolicy.assertCan({
+        allowed: !exists,
+        userId: access.userId,
+        projectId,
+        permission: Permission.WRITE_APP_CONNECTION,
+    })
 }
 
 const DEFAULT_PAGE_SIZE = 10

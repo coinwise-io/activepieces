@@ -19,6 +19,7 @@ const accessControlKeys = {
 };
 
 const PRINCIPAL_SEARCH_DEBOUNCE_MS = 250;
+const PRINCIPAL_SEARCH_MIN_LENGTH = 3;
 
 const accessControlHooks = {
   useGrants({ target, enabled }: { target: AccessTarget; enabled: boolean }) {
@@ -64,10 +65,10 @@ const accessControlHooks = {
         (
           await accessControlApi.listPrincipals({
             projectId,
-            search: debouncedSearch.length > 0 ? debouncedSearch : undefined,
+            search: debouncedSearch,
           })
         ).data,
-      enabled,
+      enabled: enabled && debouncedSearch.length >= PRINCIPAL_SEARCH_MIN_LENGTH,
     });
   },
 };
@@ -100,4 +101,9 @@ const accessControlMutations = {
   },
 };
 
-export { accessControlHooks, accessControlKeys, accessControlMutations };
+export {
+  PRINCIPAL_SEARCH_MIN_LENGTH,
+  accessControlHooks,
+  accessControlKeys,
+  accessControlMutations,
+};

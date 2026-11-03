@@ -3,6 +3,7 @@ import { FlowRunStatus, McpToolDefinition, ProjectScopedMcpServer, RunEnvironmen
 import { FastifyBaseLogger } from 'fastify'
 import { z } from 'zod'
 import { flowRunService } from '../../flows/flow-run/flow-run-service'
+import { mcpFlowAccess } from '../mcp-flow-access'
 import { formatRunSummary } from './flow-run-utils'
 import { mcpUtils } from './mcp-utils'
 
@@ -16,7 +17,7 @@ const listRunsInput = z.object({
     limit: z.number().min(1).max(50).optional().describe('Max runs to return (default 10, max 50)'),
 })
 
-export const apListRunsTool = (mcp: ProjectScopedMcpServer, log: FastifyBaseLogger): McpToolDefinition => {
+export const apListRunsTool = (mcp: ProjectScopedMcpServer, log: FastifyBaseLogger, userId?: string): McpToolDefinition => {
     return {
         title: 'ap_list_runs',
         permission: Permission.READ_RUN,
@@ -32,7 +33,9 @@ export const apListRunsTool = (mcp: ProjectScopedMcpServer, log: FastifyBaseLogg
                 // falls back to slow paths that time out for large projects, so default to PRODUCTION.
                 const effectiveEnvironment = environment ?? (isNil(flowId) ? RunEnvironment.PRODUCTION : undefined)
 
+                const access = (await mcpFlowAccess.resolve({ userId, projectId: mcp.projectId, log })) ?? undefined
                 const result = await flowRunService(log).list({
+                    access,
                     projectId: mcp.projectId,
                     flowId: flowId ? [flowId] : undefined,
                     status: status ? [status] : undefined,

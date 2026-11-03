@@ -1,10 +1,11 @@
 import { ActivepiecesError, ErrorCode, isNil, LocalesEnum } from '@activepieces/core-utils'
 import { PieceMetadataModel, PieceMetadataModelSummary } from '@activepieces/pieces-framework'
 import { ALL_PRINCIPAL_TYPES, EngineResponse, EngineResponseStatus, FlowVersion, GetPieceRequestParams, GetPieceRequestQuery, GetPieceRequestWithScopeParams, ListPiecesRequestQuery, PieceAudienceFilter, PieceCategory, PieceOptionRequest, Principal, PrincipalType, RegistryPiecesRequestQuery, SampleDataFileType, WorkerJobType } from '@activepieces/shared'
-import { FastifyBaseLogger } from 'fastify'
+import { FastifyBaseLogger, FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
 import { flowService } from '../../flows/flow/flow.service'
@@ -123,6 +124,7 @@ const basePiecesController: FastifyPluginAsyncZod = async (app) => {
         async (req) => {
             const projectId = req.projectId
             const platform = req.principal.platform
+            await assertCanResolveOptions({ request: req, projectId, flowId: req.body.flowId, flowVersionId: req.body.flowVersionId })
             const flowVersion = await getFlowVersionForOptions({ projectId, flowId: req.body.flowId, flowVersionId: req.body.flowVersionId, log: req.log })
             const sampleData = isNil(flowVersion) ? {} : await sampleDataService(req.log).getSampleDataForFlow({
                 projectId,
@@ -228,6 +230,21 @@ const ListCategoriesRequest = {
     schema: {
         querystring: ListPiecesRequestQuery,
     },
+}
+
+async function assertCanResolveOptions({ request, projectId, flowId, flowVersionId }: { request: FastifyRequest, projectId: string, flowId: string | undefined, flowVersionId: string | undefined }): Promise<void> {
+    const guard = accessGuard(request.log)
+    if (isNil(flowId) && isNil(flowVersionId)) {
+        await guard.assertProjectForRequest({ request, capability: 'EDIT' })
+        return
+    }
+    const access = await guard.forRequest({ request })
+    if (!isNil(flowId)) {
+        await guard.assertFlowById({ access, projectId, flowId, capability: 'EDIT' })
+    }
+    if (!isNil(flowVersionId)) {
+        await guard.assertFlowByVersionId({ access, projectId, flowVersionId, capability: 'EDIT' })
+    }
 }
 
 const OptionsPieceRequest = {

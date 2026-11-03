@@ -168,11 +168,11 @@ describe('Folder scope grants', () => {
         expect(ids).toEqual([inFolder.id, alsoInFolder.id].sort())
         expect(count.json()).toBe(2)
         expect(getInside.statusCode).toBe(StatusCodes.OK)
-        expect(getOutside.statusCode).toBe(StatusCodes.FORBIDDEN)
-        expect(getUncategorized.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(getOutside.statusCode).toBe(StatusCodes.NOT_FOUND)
+        expect(getUncategorized.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(renamed.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(runs).toEqual([own])
-        expect(ownOutsideRun.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(ownOutsideRun.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(versions.statusCode).toBe(StatusCodes.OK)
     })
 
@@ -192,7 +192,7 @@ describe('Folder scope grants', () => {
 
         expect(list.statusCode).toBe(StatusCodes.OK)
         expect(list.json().data.map((folder: { id: string }) => folder.id).sort()).toEqual([granted.id, withGrantedFlow.id].sort())
-        expect(getHidden.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(getHidden.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(getGranted.statusCode).toBe(StatusCodes.OK)
     })
 
@@ -221,7 +221,7 @@ describe('Folder scope grants', () => {
         expect(createdOutside.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(createdElsewhere.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(renamed.statusCode).toBe(StatusCodes.OK)
-        expect(renamedElsewhere.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(renamedElsewhere.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(moveOut.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(newFolder.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(renameFolder.statusCode).toBe(StatusCodes.FORBIDDEN)
@@ -247,7 +247,7 @@ describe('Flow scope grants', () => {
 
         expect(runs).toEqual([first, second].sort())
         expect(filteredToOther).toEqual([])
-        expect(getOther.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(getOther.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(flows).toEqual([audited.id])
         expect(counts.json().data.reduce((total: number, row: { count: number }) => total + row.count, 0)).toBe(2)
     })
@@ -269,11 +269,11 @@ describe('Flow scope grants', () => {
         const project = await memberOne.get(`/v1/projects/${admin.project.id}`)
 
         expect(renamed.statusCode).toBe(StatusCodes.OK)
-        expect(renamedOther.statusCode).toBe(StatusCodes.FORBIDDEN)
-        expect(getOther.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(renamedOther.statusCode).toBe(StatusCodes.NOT_FOUND)
+        expect(getOther.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(folder.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(created.statusCode).toBe(StatusCodes.FORBIDDEN)
-        expect(deletedOther.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(deletedOther.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(connections.statusCode).toBe(StatusCodes.OK)
         expect(tables.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(project.statusCode).toBe(StatusCodes.OK)
@@ -291,11 +291,11 @@ describe('Flow scope grants', () => {
         const testStepOther = await memberOne.post('/v1/sample-data/test-step', { projectId: admin.project.id, flowVersionId: other.version.id, stepName: 'trigger' })
         const testTriggerOther = await memberOne.post('/v1/test-trigger', { projectId: admin.project.id, flowId: other.id, flowVersionId: other.version.id, testStrategy: 'TEST_FUNCTION' })
 
-        expect(sampleOther.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(sampleOther.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(sampleMine.statusCode).not.toBe(StatusCodes.FORBIDDEN)
-        expect(eventsOther.statusCode).toBe(StatusCodes.FORBIDDEN)
-        expect(testStepOther.statusCode).toBe(StatusCodes.FORBIDDEN)
-        expect(testTriggerOther.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(eventsOther.statusCode).toBe(StatusCodes.NOT_FOUND)
+        expect(testStepOther.statusCode).toBe(StatusCodes.NOT_FOUND)
+        expect(testTriggerOther.statusCode).toBe(StatusCodes.NOT_FOUND)
     })
 
     it('forbids retrying runs of flows the caller cannot edit and other people runs', async () => {
@@ -313,7 +313,7 @@ describe('Flow scope grants', () => {
         const cancel = await memberOne.post('/v1/flow-runs/cancel', { projectId: admin.project.id, flowRunIds: [others] })
 
         expect(retryOthers.statusCode).toBe(StatusCodes.FORBIDDEN)
-        expect(retryUnrelated.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(retryUnrelated.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(retryAsReader.statusCode).toBe(StatusCodes.FORBIDDEN)
         expect(cancel.statusCode).toBe(StatusCodes.FORBIDDEN)
     })

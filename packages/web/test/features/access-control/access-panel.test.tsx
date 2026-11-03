@@ -38,11 +38,17 @@ vi.mock('@/components/custom/searchable-select', () => ({
   SearchableSelect: ({
     options,
     onChange,
+    refreshOnSearch,
   }: {
     options: { value: string; label: string }[];
     onChange: (value: string) => void;
+    refreshOnSearch: (search: string) => void;
   }) => (
     <div>
+      <input
+        aria-label="search principals"
+        onChange={(event) => refreshOnSearch(event.target.value)}
+      />
       {options.map((option) => (
         <button
           key={option.value}
@@ -182,6 +188,9 @@ describe('AccessPanel', () => {
   it('adds a grant for a picked principal with the chosen role', async () => {
     renderPanel();
 
+    fireEvent.change(await screen.findByLabelText('search principals'), {
+      target: { value: 'onb' },
+    });
     fireEvent.click(await screen.findByText('pick Onboarding'));
     fireEvent.click(screen.getByRole('button', { name: 'Give access' }));
 
@@ -196,18 +205,51 @@ describe('AccessPanel', () => {
     );
   });
 
-  it('hides the add form and remove buttons when the user cannot manage access', async () => {
+  it('does not query grants or show the form when the user cannot manage access', async () => {
     api.getEffectiveAccess.mockResolvedValue({
       ...managerAccess,
       canManageAccess: false,
     });
     renderPanel();
 
-    await screen.findAllByTestId('access-grant-row');
+    expect(
+      await screen.findByText('You do not have permission to manage access.'),
+    ).toBeTruthy();
+    expect(api.listGrants).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Give access' })).toBeNull();
+  });
+
+  it('does not search principals until 3 characters are typed', async () => {
+    renderPanel();
+
+    const input = await screen.findByLabelText('search principals');
+    expect(
+      screen.getByText('Type at least 3 characters to search'),
+    ).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'on' } });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(api.listPrincipals).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: 'onb' } });
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Give access' })).toBeNull(),
+      expect(api.listPrincipals).toHaveBeenCalledWith({
+        projectId: 'project',
+        search: 'onb',
+      }),
     );
-    expect(screen.queryByLabelText('Remove access for Ana Silva')).toBeNull();
+  });
+
+  it('shows an empty state when nothing matches', async () => {
+    api.listPrincipals.mockResolvedValue({ data: [] });
+    renderPanel();
+
+    fireEvent.change(await screen.findByLabelText('search principals'), {
+      target: { value: 'zzz' },
+    });
+
+    expect(
+      await screen.findByText('No users or groups match your search'),
+    ).toBeTruthy();
   });
 
   it('reads manage rights for the folder being shown', async () => {

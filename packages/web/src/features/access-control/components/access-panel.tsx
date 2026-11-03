@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { INTERNAL_ERROR_MESSAGE } from '@/components/ui/sonner';
 import {
+  PRINCIPAL_SEARCH_MIN_LENGTH,
   accessControlHooks,
   accessControlMutations,
 } from '@/hooks/access-control-hooks';
@@ -34,26 +35,43 @@ import { api } from '@/lib/api';
 import { accessRoleCopy } from '../lib/access-role-copy';
 
 export function AccessPanel({ target }: AccessPanelProps) {
-  const { data: effective } = accessControlHooks.useEffectiveAccess({
-    request: {
-      projectId: target.projectId,
-      folderId: target.folderId,
-      flowId: target.flowId,
-    },
-    enabled: true,
-  });
+  const { data: effective, isLoading: isLoadingAccess } =
+    accessControlHooks.useEffectiveAccess({
+      request: {
+        projectId: target.projectId,
+        folderId: target.folderId,
+        flowId: target.flowId,
+      },
+      enabled: true,
+    });
   const canManageAccess = effective?.canManageAccess ?? false;
   const {
     data: grants,
     isLoading,
     isError,
     refetch,
-  } = accessControlHooks.useGrants({ target, enabled: true });
+  } = accessControlHooks.useGrants({ target, enabled: canManageAccess });
   const exactScope = accessRoleCopy.scopeOfTarget(target);
+
+  if (isLoadingAccess) {
+    return (
+      <div className="flex justify-center py-6">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (!canManageAccess) {
+    return (
+      <p className="py-6 text-center text-sm text-gray-11">
+        {t('You do not have permission to manage access.')}
+      </p>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      {canManageAccess && <AddGrantForm target={target} />}
+      <AddGrantForm target={target} />
       <div className="flex flex-col gap-2">
         {isLoading && (
           <div className="flex justify-center py-6">
@@ -73,7 +91,7 @@ export function AccessPanel({ target }: AccessPanelProps) {
             key={grant.id}
             grant={grant}
             inherited={grant.scope !== exactScope}
-            removable={canManageAccess && grant.scope === exactScope}
+            removable={grant.scope === exactScope}
           />
         ))}
       </div>
@@ -177,7 +195,7 @@ function AddGrantForm({ target }: { target: AccessTarget }) {
   const [search, setSearch] = useState('');
   const [principal, setPrincipal] = useState<AccessGrantPrincipal | null>(null);
   const [role, setRole] = useState<AccessRole>(AccessRole.EXECUTOR);
-  const { data: principals, isLoading } = accessControlHooks.usePrincipals({
+  const { data: principals, isFetching } = accessControlHooks.usePrincipals({
     projectId: target.projectId,
     search,
     enabled: true,
@@ -196,6 +214,12 @@ function AddGrantForm({ target }: { target: AccessTarget }) {
     description:
       candidate.type === AccessPrincipalType.GROUP ? t('Group') : t('User'),
   }));
+  const searchable = search.trim().length >= PRINCIPAL_SEARCH_MIN_LENGTH;
+  const searchHint = !searchable
+    ? t('Type at least 3 characters to search')
+    : !isFetching && options.length === 0
+    ? t('No users or groups match your search')
+    : null;
   const cachedOptions = principal
     ? [{ value: principalKey(principal), label: principalLabel(principal) }]
     : [];
@@ -231,7 +255,7 @@ function AddGrantForm({ target }: { target: AccessTarget }) {
           cachedOptions={cachedOptions}
           value={principal ? principalKey(principal) : undefined}
           placeholder={t('Search users and groups')}
-          loading={isLoading}
+          loading={isFetching}
           refreshOnSearch={setSearch}
           onChange={(key) =>
             setPrincipal(
@@ -241,6 +265,7 @@ function AddGrantForm({ target }: { target: AccessTarget }) {
             )
           }
         />
+        {searchHint && <p className="text-xs text-gray-11">{searchHint}</p>}
       </div>
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">{t('Role')}</span>

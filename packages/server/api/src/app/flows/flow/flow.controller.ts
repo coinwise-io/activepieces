@@ -5,6 +5,7 @@ import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
 import { accessGuard } from '../../access-control/access-guard'
+import { accessPolicy } from '../../access-control/access-policy'
 import { entitiesMustBeOwnedByCurrentProject } from '../../authentication/authorization'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
@@ -85,7 +86,12 @@ export const flowController: FastifyPluginAsyncZod = async (app) => {
         const flowRef = { id: flow.id, folderId: flow.folderId ?? null }
         guard.assertFlow({ access, projectId: request.projectId, flow: flowRef, capability: 'EDIT', permission: Permission.UPDATE_FLOW_STATUS })
         if (request.body.type === FlowOperationType.CHANGE_FOLDER) {
-            guard.assertFlow({ access, projectId: request.projectId, flow: { id: flow.id, folderId: request.body.request.folderId ?? null }, capability: 'EDIT', permission: Permission.UPDATE_FLOW_STATUS })
+            accessPolicy.assertCan({
+                allowed: accessPolicy.canOnFolder({ access, folderId: request.body.request.folderId ?? null, capability: 'EDIT' }),
+                userId: access.userId,
+                projectId: request.projectId,
+                permission: Permission.UPDATE_FLOW_STATUS,
+            })
         }
 
         return flowService(request.log).update({

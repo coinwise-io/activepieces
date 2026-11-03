@@ -1,12 +1,11 @@
 import { AIProviderName, apId } from '@activepieces/core-utils'
-import { DefaultProjectRole, PlatformModelTier, PrincipalType } from '@activepieces/shared'
+import { PlatformModelTier } from '@activepieces/shared'
 import { FastifyInstance } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
 import { databaseConnection } from '../../../../src/app/database/database-connection'
-import { generateMockToken } from '../../../helpers/auth'
 import { db } from '../../../helpers/db'
 import { mockAndSaveAIProvider } from '../../../helpers/mocks'
-import { createMemberContext, createTestContext, TestContext } from '../../../helpers/test-context'
+import { createTestContext, TestContext } from '../../../helpers/test-context'
 import { setupTestEnvironment, teardownTestEnvironment } from '../../../helpers/test-setup'
 
 let app: FastifyInstance | null = null

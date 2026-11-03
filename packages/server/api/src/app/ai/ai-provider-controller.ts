@@ -1,4 +1,4 @@
-import { AiProviderKeyStatus, AIProviderName } from '@activepieces/core-utils'
+import { AiProviderKeyStatus, AIProviderName, Permission } from '@activepieces/core-utils'
 import { modelTierCatalog } from '@activepieces/server-utils'
 import { AIProviderModel, AIProviderWithoutSensitiveData, CreateAIProviderRequest, ModelOptions, ModelOptionsSurface, PrincipalType, SERVICE_KEY_SECURITY_OPENAPI, spreadIfDefined, UpdateAIProviderRequest } from '@activepieces/shared'
 import { FastifyRequest } from 'fastify'
@@ -85,7 +85,7 @@ export const aiProviderController: FastifyPluginAsyncZod = async (app) => {
 
 const ListAIProvidersForProject = {
     config: {
-        security: securityAccess.project([PrincipalType.USER, PrincipalType.ENGINE], undefined, { type: ProjectResourceType.QUERY }),
+        security: securityAccess.project([PrincipalType.USER, PrincipalType.ENGINE], Permission.WRITE_FLOW, { type: ProjectResourceType.QUERY }),
     },
     schema: {
         querystring: z.object({
@@ -167,7 +167,7 @@ const ListModelTiers = {
 
 const ListModelOptions = {
     config: {
-        security: securityAccess.project([PrincipalType.USER], undefined, { type: ProjectResourceType.QUERY }),
+        security: securityAccess.project([PrincipalType.USER], Permission.WRITE_FLOW, { type: ProjectResourceType.QUERY }),
     },
     schema: {
         querystring: z.object({
@@ -200,7 +200,7 @@ const ListPlatformModelOptions = {
 
 const ListModels = {
     config: {
-        security: securityAccess.project([PrincipalType.USER, PrincipalType.ENGINE], undefined, { type: ProjectResourceType.QUERY }),
+        security: securityAccess.project([PrincipalType.USER, PrincipalType.ENGINE], Permission.WRITE_FLOW, { type: ProjectResourceType.QUERY }),
     },
     schema: {
         params: z.object({

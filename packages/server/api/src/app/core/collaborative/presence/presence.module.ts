@@ -24,6 +24,12 @@ export const presenceModule: FastifyPluginAsyncZod = async (app) => {
                     return
                 }
 
+                const joined = await websocketService.joinResourceRoom({ socket, resourceId, flow: resource.flow, userId: principal.id, projectId, log: app.log })
+                if (!joined) {
+                    callback?.({ users: [] })
+                    return
+                }
+
                 const user = await userService(app.log).getMetaInformation({ id: principal.id })
                 const displayName = `${user.firstName} ${user.lastName}`
 
@@ -38,7 +44,7 @@ export const presenceModule: FastifyPluginAsyncZod = async (app) => {
                 socket.data.presenceResourceId = resourceId
 
                 const users = await presenceService(app.log).getActiveUsers({ resourceId, projectId })
-                websocketService.to(projectId).emit(WebsocketClientEvent.PRESENCE_UPDATED, {
+                websocketService.toResourceAudience({ projectId, resourceId }).emit(WebsocketClientEvent.PRESENCE_UPDATED, {
                     resourceId,
                     users,
                 })
@@ -69,7 +75,7 @@ export const presenceModule: FastifyPluginAsyncZod = async (app) => {
                 socket.data.presenceResourceId = null
 
                 const users = await presenceService(app.log).getActiveUsers({ resourceId, projectId })
-                websocketService.to(projectId).emit(WebsocketClientEvent.PRESENCE_UPDATED, {
+                websocketService.toResourceAudience({ projectId, resourceId }).emit(WebsocketClientEvent.PRESENCE_UPDATED, {
                     resourceId,
                     users,
                 })
@@ -95,7 +101,7 @@ function registerPresenceDisconnectHandler({ socket, userId, projectId, app }: R
                 userId,
             })
             const users = await presenceService(app.log).getActiveUsers({ resourceId: presenceResourceId, projectId })
-            websocketService.to(projectId).emit(WebsocketClientEvent.PRESENCE_UPDATED, {
+            websocketService.toResourceAudience({ projectId, resourceId: presenceResourceId }).emit(WebsocketClientEvent.PRESENCE_UPDATED, {
                 resourceId: presenceResourceId,
                 users,
             })

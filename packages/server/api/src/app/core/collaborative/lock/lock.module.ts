@@ -27,7 +27,7 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
                     callback?.({ acquired: false, lock: null })
                     return
                 }
-                const canWriteResource = websocketService.socketHasPermission({ socket, permission: resource.writePermission })
+                const canWriteResource = await websocketService.userHasPermission({ userId: principal.id, projectId, permission: resource.writePermission, log: app.log })
                     && await canEditFlowResource({ flow: resource.flow, userId: principal.id, projectId, log: app.log })
                 if (!canWriteResource) {
                     app.log.debug({ resourceId, user: { id: principal.id }, project: { id: projectId } }, '[LOCK_RESOURCE] Denied: missing write permission')
@@ -35,6 +35,7 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
                     return
                 }
 
+                await websocketService.joinResourceRoom({ socket, resourceId, flow: resource.flow, userId: principal.id, projectId, log: app.log })
                 const user = await userService(app.log).getMetaInformation({ id: principal.id })
                 const displayName = `${user.firstName} ${user.lastName}`
 
@@ -49,7 +50,7 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
 
                 if (result.acquired) {
                     trackLockedResource({ socket, resourceId, editorSessionId: editorSessionId ?? null })
-                    socket.to(projectId).emit(WebsocketClientEvent.RESOURCE_LOCKED, {
+                    socket.to([projectId, websocketService.resourceRoom(resourceId)]).emit(WebsocketClientEvent.RESOURCE_LOCKED, {
                         resourceId,
                         userId: principal.id,
                         userDisplayName: displayName,
@@ -82,7 +83,7 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
                 })
                 untrackLockedResource({ socket, resourceId })
                 if (released) {
-                    websocketService.to(projectId).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
+                    websocketService.toResourceAudience({ projectId, resourceId }).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
                         resourceId,
                     })
                 }
@@ -133,7 +134,7 @@ function registerLockDisconnectHandler({ socket, userId, projectId, app }: Regis
                 editorSessionId,
             })
             if (released) {
-                websocketService.to(projectId).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
+                websocketService.toResourceAudience({ projectId, resourceId }).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
                     resourceId,
                 })
             }

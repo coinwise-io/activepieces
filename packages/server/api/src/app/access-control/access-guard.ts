@@ -10,6 +10,10 @@ export const accessGuard = (log: FastifyBaseLogger) => ({
         return projectAccess(log).resolveForPrincipal({ principal: request.principal, projectId: projectIdOf({ request }) })
     },
 
+    projectIdOf({ request }: { request: FastifyRequest }): string {
+        return projectIdOf({ request })
+    },
+
     async assertProjectForRequest({ request, capability, permission }: AssertProjectForRequestParams): Promise<void> {
         this.assertProject({
             access: await this.forRequest({ request }),
@@ -35,6 +39,7 @@ export const accessGuard = (log: FastifyBaseLogger) => ({
     },
 
     assertFlow({ access, projectId, flow, capability, permission }: AssertFlowParams): void {
+        assertSomeRoleOrNotFound({ access, flow, entityType: 'flow' })
         accessPolicy.assertCan({
             allowed: accessPolicy.canOnFlow({ access, flow, capability }),
             userId: access.userId,
@@ -86,6 +91,7 @@ export const accessGuard = (log: FastifyBaseLogger) => ({
             return
         }
         const flow = await this.loadFlowRef({ projectId, flowId: run.flowId })
+        assertSomeRoleOrNotFound({ access, flow, entityType: 'flow_run' })
         accessPolicy.assertCan({
             allowed: accessPolicy.canReadRun({ access, flow, triggeredBy: run.triggeredBy, scope }),
             userId: access.userId,
@@ -108,6 +114,19 @@ export const accessGuard = (log: FastifyBaseLogger) => ({
         return this.assertFlowById({ access, projectId, flowId: version.flowId, capability, permission })
     },
 })
+
+function assertSomeRoleOrNotFound({ access, flow, entityType }: { access: ProjectAccess, flow: FlowRef, entityType: string }): void {
+    if (access.unrestricted || accessPolicy.rolesOnFlow({ access, flow }).length > 0) {
+        return
+    }
+    throw new ActivepiecesError({
+        code: ErrorCode.ENTITY_NOT_FOUND,
+        params: {
+            entityId: flow.id,
+            entityType,
+        },
+    })
+}
 
 function projectIdOf({ request }: { request: FastifyRequest }): string {
     const projectId = request.projectId

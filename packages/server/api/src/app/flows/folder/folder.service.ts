@@ -1,4 +1,4 @@
-import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, Permission, ProjectId, SeekPage } from '@activepieces/core-utils'
+import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, ProjectId, SeekPage } from '@activepieces/core-utils'
 import { CreateFolderRequest, Folder, FolderDto, FolderId, UpdateFolderRequest } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { accessPolicy, ProjectAccess } from '../../access-control/access-policy'
@@ -117,13 +117,17 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             },
         })
         
+        const visibleFlows = isNil(access) ? null : accessPolicy.flowCapabilityCondition({ access, flowAlias: 'flow', capability: 'SEE' })
         const queryBuilder = folderRepo()
             .createQueryBuilder('folder')
             .where('folder.projectId = :projectId', { projectId })
-            .addSelect((subQuery) => subQuery
-                .select('COUNT(*)::int')
-                .from('flow', 'flow')
-                .where('flow."folderId" = folder.id'), 'numberOfFlows')
+            .addSelect((subQuery) => {
+                const countQuery = subQuery
+                    .select('COUNT(*)::int')
+                    .from('flow', 'flow')
+                    .where('flow."folderId" = folder.id')
+                return isNil(visibleFlows) ? countQuery : countQuery.andWhere(visibleFlows.sql, visibleFlows.params)
+            }, 'numberOfFlows')
             .addSelect((subQuery) => subQuery
                 .select('COUNT(*)::int')
                 .from('table', 'tbl')
@@ -158,7 +162,7 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             })
         }
         const [numberOfFlows, numberOfTables] = await Promise.all([
-            flowService(log).count({ projectId, folderId }),
+            flowService(log).count({ projectId, folderId, access: access?.unrestricted ? undefined : access }),
             tableService.count({ projectId, folderId }),
         ])
         return {
@@ -175,8 +179,14 @@ async function assertFolderVisible({ access, projectId, folderId }: { access: Pr
         .where('folder."projectId" = :projectId AND folder."id" = :folderId', { projectId, folderId })
     accessPolicy.applyFolderScope({ queryBuilder, access, folderAlias: 'folder', projectId })
     const visible = await queryBuilder.getExists()
-    const exists = await folderRepo().existsBy({ projectId, id: folderId })
-    accessPolicy.assertCan({ allowed: visible || !exists, userId: access.userId, projectId, permission: Permission.READ_FOLDER })
+    if (!visible) {
+        throw new ActivepiecesError({
+            code: ErrorCode.ENTITY_NOT_FOUND,
+            params: {
+                message: `Folder ${folderId} is not found`,
+            },
+        })
+    }
 }
 
 function folderUpsertLockKey({ projectId, displayName }: { projectId: ProjectId, displayName: string }): string {

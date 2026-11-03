@@ -40,7 +40,7 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
         '/:id',
         UpdateFolderParams,
         async (request) => {
-            await assertProjectEditor({ request })
+            await assertFolderEditor({ request, folderId: request.params.id })
             const updatedFlow = await folderService(request.log).update({
                 projectId: request.projectId,
                 folderId: request.params.id,
@@ -89,7 +89,7 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
         '/:id',
         DeleteFolderParams,
         async (request, reply) => {
-            await assertProjectEditor({ request })
+            await assertFolderEditor({ request, folderId: request.params.id })
             const folder = await folderService(request.log).getOneOrThrow({
                 projectId: request.projectId,
                 folderId: request.params.id,
@@ -109,6 +109,13 @@ const folderController: FastifyPluginAsyncZod = async (fastify) => {
     )
 }
 
+
+async function assertFolderEditor({ request, folderId }: { request: FastifyRequest, folderId: string }): Promise<void> {
+    const guard = accessGuard(request.log)
+    const access = await guard.forRequest({ request })
+    await folderService(request.log).getOneOrThrow({ projectId: guard.projectIdOf({ request }), folderId, access })
+    await assertProjectEditor({ request })
+}
 
 async function assertProjectEditor({ request }: { request: FastifyRequest }): Promise<void> {
     await accessGuard(request.log).assertProjectForRequest({

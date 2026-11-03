@@ -9,7 +9,6 @@ import { pubsub } from '../../helper/pubsub'
 import { system } from '../../helper/system/system'
 import { projectService } from '../../project/project-service'
 import { RunsMetadataUpsertData } from '../../workers/job'
-import { flowRunRepo } from './flow-run-service'
 import { runsMetadataQueue } from './flow-runs-queue'
 
 export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
@@ -17,8 +16,7 @@ export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
         websocketService.toRunViewers({ projectId, triggeredBy: triggeredByOfRunProgress(request) }).emit(WebsocketClientEvent.UPDATE_RUN_PROGRESS, request)
     },
 
-    async updateStepProgress({ projectId, request }: UpdateStepProgressParams): Promise<void> {
-        const triggeredBy = await findTriggeredBy({ runId: request.runId, projectId })
+    updateStepProgress({ projectId, request, triggeredBy }: UpdateStepProgressParams): void {
         websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, request)
     },
 
@@ -29,7 +27,7 @@ export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
         )
     },
 
-    async uploadRunLog({ projectId, request }: UploadRunLogParams): Promise<void> {
+    async uploadRunLog({ projectId, request, triggeredBy }: UploadRunLogParams): Promise<void> {
         const internalErrorEnabled = request.internalError?.source === RunInternalErrorSource.ENGINE || system.getEdition() !== ApEdition.CLOUD
         const internalError = internalErrorEnabled ? request.internalError : undefined
         const isTerminal = !isNil(request.status) && isFlowRunStateTerminal({ status: request.status, ignoreInternalError: false })
@@ -75,7 +73,6 @@ export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
 
         if (request.stepResponse && request.streamStepProgress === StreamStepProgress.WEBSOCKET) {
             const stepData = { ...request.stepResponse, projectId }
-            const triggeredBy = await findTriggeredBy({ runId: request.runId, projectId })
             if (!isTerminal) {
                 websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, stepData)
             }
@@ -101,11 +98,6 @@ function triggeredByOfRunProgress(request: unknown): string | null {
     }
     const triggeredBy = request.flowRun.triggeredBy
     return typeof triggeredBy === 'string' ? triggeredBy : null
-}
-
-async function findTriggeredBy({ runId, projectId }: { runId: string, projectId: string }): Promise<string | null> {
-    const run = await flowRunRepo().findOne({ select: { id: true, triggeredBy: true }, where: { id: runId, projectId } })
-    return run?.triggeredBy ?? null
 }
 
 async function ensureLogsFileExists({ log, projectId, logsFileId, internalError }: EnsureLogsFileParams): Promise<void> {
@@ -156,6 +148,7 @@ type UpdateRunProgressParams = {
 type UpdateStepProgressParams = {
     projectId: string
     request: UpdateStepProgressRequest
+    triggeredBy: string | null
 }
 
 type SendFlowResponseParams = {
@@ -165,6 +158,7 @@ type SendFlowResponseParams = {
 type UploadRunLogParams = {
     projectId: string
     request: UploadRunLogsRequest
+    triggeredBy?: string | null
 }
 
 type EnsureLogsFileParams = {

@@ -10,6 +10,7 @@ import { securityAccess } from '../core/security/authorization/fastify-security'
 import { fileService } from '../file/file.service'
 import { flowService } from '../flows/flow/flow.service'
 import { engineRunCallbackService } from '../flows/flow-run/engine-run-callback-service'
+import { flowRunService } from '../flows/flow-run/flow-run-service'
 import { flowVersionService } from '../flows/flow-version/flow-version.service'
 import { pieceBundle } from '../pieces/piece-bundle'
 
@@ -80,9 +81,10 @@ export const flowEngineWorker: FastifyPluginAsyncZod = async (app) => {
     })
 
     app.post('/step-progress', StepProgressRequest, async (request, reply) => {
-        await engineRunCallbackService(request.log).updateStepProgress({
+        engineRunCallbackService(request.log).updateStepProgress({
             projectId: request.principal.projectId,
             request: request.body,
+            triggeredBy: await flowRunService(request.log).getTriggeredBy({ runId: request.body.runId, projectId: request.principal.projectId }),
         })
         return reply.status(StatusCodes.OK).send()
     })
@@ -91,6 +93,9 @@ export const flowEngineWorker: FastifyPluginAsyncZod = async (app) => {
         await engineRunCallbackService(request.log).uploadRunLog({
             projectId: request.principal.projectId,
             request: request.body,
+            triggeredBy: isNil(request.body.stepResponse)
+                ? null
+                : await flowRunService(request.log).getTriggeredBy({ runId: request.body.runId, projectId: request.principal.projectId }),
         })
         return reply.status(StatusCodes.OK).send()
     })

@@ -177,7 +177,7 @@ describe('Draft Push', () => {
             const ctx = await createTestContext(app)
             const flow = await createFlow(ctx)
             const pushError = new Error('socket server is down')
-            vi.spyOn(websocketService, 'to').mockImplementation(() => {
+            vi.spyOn(websocketService, 'toResourceAudience').mockImplementation(() => {
                 throw pushError
             })
             const logError = vi.spyOn(app.log, 'error')

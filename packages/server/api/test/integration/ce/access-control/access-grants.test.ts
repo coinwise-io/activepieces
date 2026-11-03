@@ -174,7 +174,7 @@ describe('Access grants CRUD', () => {
         expect(onFolder.statusCode).toBe(StatusCodes.CREATED)
         expect(onFlow.statusCode).toBe(StatusCodes.CREATED)
         expect(onProject.statusCode).toBe(StatusCodes.FORBIDDEN)
-        expect(onOtherFolder.statusCode).toBe(StatusCodes.FORBIDDEN)
+        expect(onOtherFolder.statusCode).toBe(StatusCodes.NOT_FOUND)
     })
 
     it('lists inherited grants for a flow with the scope of each', async () => {
@@ -292,8 +292,7 @@ describe('Effective access', () => {
         expect(editorOnFolder.json().roles).toEqual([AccessRole.EDITOR])
         expect(editorOnFolder.json().canManageAccess).toBe(true)
         expect(editorOnFolder.json().permissions).toContain(Permission.WRITE_FLOW)
-        expect(editorOnOther.json().canManageAccess).toBe(false)
-        expect(editorOnOther.json().permissions).not.toContain(Permission.WRITE_FLOW)
+        expect(editorOnOther.statusCode).toBe(StatusCodes.NOT_FOUND)
         expect(executorOnFolder.json().roles).toEqual([AccessRole.EXECUTOR])
         expect(executorOnFolder.json().canManageAccess).toBe(false)
     })
@@ -308,9 +307,7 @@ describe('Effective access', () => {
         const onOther = await memberOne.get('/v1/access-grants/effective', { projectId: admin.project.id, flowId: other.id })
 
         expect(onGranted.json().permissions).toContain(Permission.WRITE_FLOW)
-        expect(onOther.json().roles).toEqual([])
-        expect(onOther.json().permissions).not.toContain(Permission.WRITE_FLOW)
-        expect(onOther.json().permissions).not.toContain(Permission.READ_FLOW)
+        expect(onOther.statusCode).toBe(StatusCodes.NOT_FOUND)
     })
 })
 

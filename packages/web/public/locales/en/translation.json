@@ -3788,5 +3788,8 @@
   "Search users and groups": "Search users and groups",
   "Give access": "Give access",
   "Choose who can see, run or change {name}.": "Choose who can see, run or change {name}.",
-  "Choose who can see, run or change the flows of this project. Access given here covers every folder and flow in it.": "Choose who can see, run or change the flows of this project. Access given here covers every folder and flow in it."
+  "Choose who can see, run or change the flows of this project. Access given here covers every folder and flow in it.": "Choose who can see, run or change the flows of this project. Access given here covers every folder and flow in it.",
+  "Type at least 3 characters to search": "Type at least 3 characters to search",
+  "No users or groups match your search": "No users or groups match your search",
+  "You do not have permission to manage access.": "You do not have permission to manage access."
 }
