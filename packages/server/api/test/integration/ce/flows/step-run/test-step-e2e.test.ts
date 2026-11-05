@@ -41,13 +41,14 @@ afterAll(async () => {
     await app.close()
 }, 60_000)
 
-async function saveSampleDataFile({ projectId, platformId, output }: { projectId: string, platformId: string, output: unknown }): Promise<string> {
+async function saveSampleDataFile({ projectId, platformId, flowId, output }: { projectId: string, platformId: string, flowId: string, output: unknown }): Promise<string> {
     const file = createMockFile({
         projectId,
         platformId,
         type: FileType.SAMPLE_DATA,
         compression: FileCompression.NONE,
         data: Buffer.from(JSON.stringify(output)),
+        metadata: { flowId },
     })
     await db.save('file', file)
     return file.id
@@ -69,15 +70,19 @@ async function pollFlowRunToCompletion({ flowRunId, projectId }: { flowRunId: st
 describe('Test step with narrowed sample data', () => {
     it('resolves a reference to an earlier step through the full worker round trip', async () => {
         const { mockPlatform, mockProject } = await mockAndSaveBasicSetup()
+        const mockFlow = createMockFlow({ projectId: mockProject.id })
+        await db.save('flow', mockFlow)
 
         const triggerFileId = await saveSampleDataFile({
             projectId: mockProject.id,
             platformId: mockPlatform.id,
+            flowId: mockFlow.id,
             output: { unreferenced: 'trigger payload the tested step never mentions' },
         })
         const firstStepFileId = await saveSampleDataFile({
             projectId: mockProject.id,
             platformId: mockPlatform.id,
+            flowId: mockFlow.id,
             output: { value: 'from-step-1' },
         })
 
@@ -89,9 +94,6 @@ describe('Test step with narrowed sample data', () => {
             pieceType: PieceType.OFFICIAL,
         })
         await databaseConnection().getRepository('piece_metadata').save(mockPiece)
-
-        const mockFlow = createMockFlow({ projectId: mockProject.id })
-        await db.save('flow', mockFlow)
 
         const stepUnderTest = {
             type: FlowActionType.CODE,

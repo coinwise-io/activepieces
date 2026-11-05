@@ -4,6 +4,8 @@ import { FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
+import { accessGuard } from '../../access-control/access-guard'
+import { accessPolicy } from '../../access-control/access-policy'
 import { entitiesMustBeOwnedByCurrentProject } from '../../authentication/authorization'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
@@ -19,6 +21,12 @@ const DEFAULT_PAGE_SIZE = 10
 export const flowController: FastifyPluginAsyncZod = async (app) => {
     app.addHook('preSerialization', entitiesMustBeOwnedByCurrentProject)
     app.post('/', CreateFlowRequestOptions, async (request, reply) => {
+        const guard = accessGuard(request.log)
+        guard.assertCanCreateFlow({
+            access: await guard.forRequest({ request }),
+            projectId: request.projectId,
+            folderId: request.body.folderId ?? null,
+        })
         const newFlow = await flowService(request.log).create({
             projectId: request.projectId,
             request: request.body,
@@ -73,6 +81,18 @@ export const flowController: FastifyPluginAsyncZod = async (app) => {
             id: request.params.id,
             projectId: request.projectId,
         })
+        const guard = accessGuard(request.log)
+        const access = await guard.forRequest({ request })
+        const flowRef = { id: flow.id, folderId: flow.folderId ?? null }
+        guard.assertFlow({ access, projectId: request.projectId, flow: flowRef, capability: 'EDIT', permission: Permission.UPDATE_FLOW_STATUS })
+        if (request.body.type === FlowOperationType.CHANGE_FOLDER) {
+            accessPolicy.assertCan({
+                allowed: accessPolicy.canOnFolder({ access, folderId: request.body.request.folderId ?? null, capability: 'EDIT' }),
+                userId: access.userId,
+                projectId: request.projectId,
+                permission: Permission.UPDATE_FLOW_STATUS,
+            })
+        }
 
         return flowService(request.log).update({
             id: request.params.id,
@@ -87,7 +107,9 @@ export const flowController: FastifyPluginAsyncZod = async (app) => {
     })
 
     app.get('/', ListFlowsRequestOptions, async (request) => {
+        const access = await accessGuard(request.log).forRequest({ request })
         return flowService(request.log).list({
+            access,
             projectIds: [request.projectId],
             folderId: request.query.folderId,
             folderIds: request.query.folderIds,
@@ -105,13 +127,17 @@ export const flowController: FastifyPluginAsyncZod = async (app) => {
     })
 
     app.get('/count', CountFlowsRequestOptions, async (request) => {
+        const access = await accessGuard(request.log).forRequest({ request })
         return flowService(request.log).count({
+            access,
             folderId: request.query.folderId,
             projectId: request.projectId,
         })
     })
 
     app.get('/:id/template', GetFlowTemplateRequestOptions, async (request) => {
+        const guard = accessGuard(request.log)
+        await guard.assertFlowById({ access: await guard.forRequest({ request }), projectId: request.projectId, flowId: request.params.id, capability: 'SEE', permission: Permission.READ_FLOW })
         const userMetadata = request.principal.type === PrincipalType.USER ? await userService(request.log).getMetaInformation({ id: request.principal.id }) : null
         return flowService(request.log).getTemplate({
             flowId: request.params.id,
@@ -122,11 +148,14 @@ export const flowController: FastifyPluginAsyncZod = async (app) => {
     })
 
     app.get('/:id', GetFlowRequestOptions, async (request) => {
-        return flowService(request.log).getOnePopulatedOrThrow({
+        const flow = await flowService(request.log).getOnePopulatedOrThrow({
             id: request.params.id,
             projectId: request.projectId,
             versionId: request.query.versionId,
         })
+        const guard = accessGuard(request.log)
+        guard.assertFlow({ access: await guard.forRequest({ request }), projectId: request.projectId, flow: { id: flow.id, folderId: flow.folderId ?? null }, capability: 'SEE', permission: Permission.READ_FLOW })
+        return flow
     })
 
     app.delete('/:id', DeleteFlowRequestOptions, async (request, reply) => {
@@ -135,6 +164,8 @@ export const flowController: FastifyPluginAsyncZod = async (app) => {
             projectId: request.projectId,
             includeDeleting: true,
         })
+        const guard = accessGuard(request.log)
+        guard.assertFlow({ access: await guard.forRequest({ request }), projectId: request.projectId, flow: { id: flow.id, folderId: flow.folderId ?? null }, capability: 'EDIT', permission: Permission.WRITE_FLOW })
         await flowService(request.log).delete({
             id: request.params.id,
             projectId: request.projectId,

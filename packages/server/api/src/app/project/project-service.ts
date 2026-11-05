@@ -248,8 +248,20 @@ export async function applyProjectsAccessFilters<T extends ObjectLiteral>(
     queryBuilder: SelectQueryBuilder<T>,
     params: ApplyProjectsAccessFiltersParams,
 ): Promise<void> {
-    const { userId, isPrivileged } = params
+    const { userId, isPrivileged, includeGrantedProjects } = params
     if (isPrivileged) {
+        return
+    }
+
+    if (includeGrantedProjects) {
+        queryBuilder.andWhere(
+            `((project."ownerId" = :userId AND project.type = :personalType) OR (project.type = :teamType AND project.id IN (
+                SELECT ag."projectId" FROM "access_grant" ag
+                WHERE ag."platformId" = project."platformId"
+                AND (ag."userId" = :userId OR ag."groupId" IN (SELECT m."groupId" FROM "user_group_member" m WHERE m."userId" = :userId))
+            )))`,
+            { userId, personalType: ProjectType.PERSONAL, teamType: ProjectType.TEAM },
+        )
         return
     }
 
@@ -297,6 +309,7 @@ type GetAllForUserParams = {
     userId: string
     isPrivileged: boolean
     displayName?: string
+    includeGrantedProjects?: boolean
 }
 
 type GetOneByOwnerAndPlatformParams = {
@@ -381,4 +394,5 @@ type ApplyProjectsAccessFiltersParams = {
     platformId: string
     userId: string
     isPrivileged: boolean
+    includeGrantedProjects?: boolean
 }

@@ -14,6 +14,7 @@ type AutomationsSelectionBarProps = {
   isDeleting: boolean;
   isMoving: boolean;
   isExporting: boolean;
+  canModify: boolean;
   hasMovableItems: boolean;
   hasExportableItems: boolean;
   onMoveClick: () => void;
@@ -27,6 +28,7 @@ export const AutomationsSelectionBar = ({
   isDeleting,
   isMoving,
   isExporting,
+  canModify,
   hasMovableItems,
   hasExportableItems,
   onMoveClick,
@@ -52,7 +54,7 @@ export const AutomationsSelectionBar = ({
                 variant="ghost"
                 size="sm"
                 onClick={onMoveClick}
-                disabled={isMoving || !hasMovableItems}
+                disabled={isMoving || !hasMovableItems || !canModify}
               >
                 <FolderInput className="h-4 w-4 mr-1" />
                 {t('Move to')}
@@ -95,7 +97,7 @@ export const AutomationsSelectionBar = ({
                 variant="ghost"
                 size="sm"
                 className="text-danger-11 hover:text-danger-11"
-                disabled={isDeleting}
+                disabled={isDeleting || !canModify}
               >
                 <Trash2 className="h-4 w-4 mr-1" />
                 {t('Delete')}

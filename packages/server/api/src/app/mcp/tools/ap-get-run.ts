@@ -2,7 +2,9 @@ import { isNil, Permission } from '@activepieces/core-utils'
 import { McpToolDefinition, ProjectScopedMcpServer } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { z } from 'zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { flowRunService } from '../../flows/flow-run/flow-run-service'
+import { mcpFlowAccess } from '../mcp-flow-access'
 import { formatRunResult } from './flow-run-utils'
 import { mcpUtils } from './mcp-utils'
 
@@ -10,7 +12,7 @@ const getRunInput = z.object({
     flowRunId: z.string().describe('The ID of the flow run. Use ap_list_runs to find it.'),
 })
 
-export const apGetRunTool = (mcp: ProjectScopedMcpServer, log: FastifyBaseLogger): McpToolDefinition => {
+export const apGetRunTool = (mcp: ProjectScopedMcpServer, log: FastifyBaseLogger, userId?: string): McpToolDefinition => {
     return {
         title: 'ap_get_run',
         permission: Permission.READ_RUN,
@@ -20,6 +22,12 @@ export const apGetRunTool = (mcp: ProjectScopedMcpServer, log: FastifyBaseLogger
         execute: async (args) => {
             try {
                 const { flowRunId } = getRunInput.parse(args)
+
+                const access = await mcpFlowAccess.resolve({ userId, projectId: mcp.projectId, log })
+                if (!isNil(access)) {
+                    const summary = await flowRunService(log).getOneOrThrow({ id: flowRunId, projectId: mcp.projectId })
+                    await accessGuard(log).assertRun({ access, projectId: mcp.projectId, run: summary, scope: 'READ', permission: Permission.READ_RUN })
+                }
 
                 const run = await flowRunService(log).getOnePopulatedOrThrow({
                     id: flowRunId,

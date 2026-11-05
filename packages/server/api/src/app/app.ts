@@ -9,6 +9,7 @@ import { FastifyBaseLogger, FastifyInstance, FastifyRequest, HTTPMethods } from 
 import { jsonSchemaTransform, jsonSchemaTransformObject } from 'fastify-type-provider-zod'
 import Mustache from 'mustache'
 import { globalRegistry } from 'zod/v4/core'
+import { accessControlModule } from './access-control/access-control.module'
 import { agentsModule } from './agents/agents-module'
 import { installAiKeyHealthReporter } from './ai/ai-key-health-reporter'
 import { aiProviderService } from './ai/ai-provider-service'
@@ -224,6 +225,7 @@ export const setupApp = async (app: FastifyInstance): Promise<FastifyInstance> =
     await app.register(templateModule)
     await app.register(platformAnalyticsModule)
     await app.register(identityProvisioningModule)
+    await app.register(accessControlModule)
 
     // Dev-only: accept browser debug logs into the shared evlog fs drain so a
     // chat run can be reconstructed end-to-end (web + api + worker). Never in cloud/prod.

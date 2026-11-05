@@ -1,6 +1,7 @@
-import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, ProjectId, SeekPage } from '@activepieces/core-utils'
+import { ActivepiecesError, apId, Cursor, ErrorCode, isNil, Permission, ProjectId, SeekPage } from '@activepieces/core-utils'
 import { CreateFolderRequest, Folder, FolderDto, FolderId, UpdateFolderRequest } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
+import { accessPolicy, ProjectAccess } from '../../access-control/access-policy'
 import { repoFactory } from '../../core/db/repo-factory'
 import { distributedLock } from '../../database/redis-connections'
 import { buildPaginator } from '../../helper/pagination/build-paginator'
@@ -11,6 +12,11 @@ import { FolderEntity } from './folder.entity'
 
 export const folderRepo = repoFactory(FolderEntity)
 
+async function refreshSocketAccess({ projectId, log }: { projectId: ProjectId, log: FastifyBaseLogger }): Promise<void> {
+    const { websocketService } = await import('../../core/websockets.service')
+    await websocketService.refreshAccessForProject({ projectId, log })
+}
+
 export const flowFolderService = (log: FastifyBaseLogger) => ({
     async delete(params: DeleteParams): Promise<void> {
         const { projectId, folderId } = params
@@ -19,6 +25,7 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             id: folder.id,
             projectId,
         })
+        await refreshSocketAccess({ projectId, log })
     },
     async update(params: UpdateParams): Promise<FolderDto> {
         const { projectId, folderId, request } = params
@@ -102,9 +109,10 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             return
         }
         await folderRepo().delete({ id: existing.id, projectId })
+        await refreshSocketAccess({ projectId, log })
     },
     async list(params: ListParams): Promise<SeekPage<FolderDto>> {
-        const { projectId, cursorRequest, limit } = params
+        const { projectId, cursorRequest, limit, access } = params
         const decodedCursor = paginationHelper.decodeCursor(cursorRequest)
         const paginator = buildPaginator({
             entity: FolderEntity,
@@ -116,17 +124,27 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             },
         })
         
+        const visibleFlows = isNil(access) ? null : accessPolicy.flowCapabilityCondition({ access, flowAlias: 'flow', capability: 'SEE' })
         const queryBuilder = folderRepo()
             .createQueryBuilder('folder')
             .where('folder.projectId = :projectId', { projectId })
-            .addSelect((subQuery) => subQuery
-                .select('COUNT(*)::int')
-                .from('flow', 'flow')
-                .where('flow."folderId" = folder.id'), 'numberOfFlows')
-            .addSelect((subQuery) => subQuery
-                .select('COUNT(*)::int')
-                .from('table', 'tbl')
-                .where('tbl."folderId" = folder.id'), 'numberOfTables')
+            .addSelect((subQuery) => {
+                const countQuery = subQuery
+                    .select('COUNT(*)::int')
+                    .from('flow', 'flow')
+                    .where('flow."folderId" = folder.id')
+                return isNil(visibleFlows) ? countQuery : countQuery.andWhere(visibleFlows.sql, visibleFlows.params)
+            }, 'numberOfFlows')
+            .addSelect(
+                canSeeTables({ access })
+                    ? '(SELECT COUNT(*)::int FROM "table" tbl WHERE tbl."folderId" = folder.id)'
+                    : '0',
+                'numberOfTables',
+            )
+
+        if (!isNil(access)) {
+            accessPolicy.applyFolderScope({ queryBuilder, access, folderAlias: 'folder', projectId })
+        }
 
         const paginationResponse = await paginator.paginate<FolderDto>(queryBuilder)
         return paginationHelper.createPage(paginationResponse.data, paginationResponse.cursor)
@@ -139,8 +157,11 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             .getOne()
     },
     async getOneOrThrow(params: GetOneOrThrowParams): Promise<FolderDto> {
-        const { projectId, folderId } = params
+        const { projectId, folderId, access } = params
         const folder = await folderRepo().findOneBy({ projectId, id: folderId })
+        if (!isNil(access) && !access.unrestricted) {
+            await assertFolderVisible({ access, projectId, folderId })
+        }
         if (!folder) {
             throw new ActivepiecesError({
                 code: ErrorCode.ENTITY_NOT_FOUND,
@@ -150,8 +171,8 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
             })
         }
         const [numberOfFlows, numberOfTables] = await Promise.all([
-            flowService(log).count({ projectId, folderId }),
-            tableService.count({ projectId, folderId }),
+            flowService(log).count({ projectId, folderId, access: access?.unrestricted ? undefined : access }),
+            canSeeTables({ access }) ? tableService.count({ projectId, folderId }) : Promise.resolve(0),
         ])
         return {
             ...folder,
@@ -160,6 +181,26 @@ export const flowFolderService = (log: FastifyBaseLogger) => ({
         }
     },
 })
+
+function canSeeTables({ access }: { access: ProjectAccess | undefined }): boolean {
+    return isNil(access) || access.unrestricted || accessPolicy.projectScopePermissions({ access }).includes(Permission.READ_TABLE)
+}
+
+async function assertFolderVisible({ access, projectId, folderId }: { access: ProjectAccess, projectId: ProjectId, folderId: FolderId }): Promise<void> {
+    const queryBuilder = folderRepo()
+        .createQueryBuilder('folder')
+        .where('folder."projectId" = :projectId AND folder."id" = :folderId', { projectId, folderId })
+    accessPolicy.applyFolderScope({ queryBuilder, access, folderAlias: 'folder', projectId })
+    const visible = await queryBuilder.getExists()
+    if (!visible) {
+        throw new ActivepiecesError({
+            code: ErrorCode.ENTITY_NOT_FOUND,
+            params: {
+                message: `Folder ${folderId} is not found`,
+            },
+        })
+    }
+}
 
 function folderUpsertLockKey({ projectId, displayName }: { projectId: ProjectId, displayName: string }): string {
     return `folder-upsert-${projectId}-${displayName.trim().toLowerCase()}`
@@ -187,6 +228,7 @@ type ListParams = {
     projectId: ProjectId
     cursorRequest: Cursor | null
     limit: number
+    access?: ProjectAccess
 }
 
 type GetOneByDisplayNameParams = {
@@ -197,6 +239,7 @@ type GetOneByDisplayNameParams = {
 type GetOneOrThrowParams = {
     projectId: ProjectId
     folderId: FolderId
+    access?: ProjectAccess
 }
 
 type ListAllParams = {

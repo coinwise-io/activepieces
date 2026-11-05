@@ -1,8 +1,10 @@
 import { isNil } from '@activepieces/core-utils'
 import { LockResourceRequest, PrincipalType, WebsocketClientEvent, WebsocketServerEvent } from '@activepieces/shared'
-import { FastifyInstance } from 'fastify'
+import { FastifyBaseLogger, FastifyInstance } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { Socket } from 'socket.io'
+import { accessGuard } from '../../../access-control/access-guard'
+import { accessPolicy, FlowRef } from '../../../access-control/access-policy'
 import { userService } from '../../../user/user-service'
 import { websocketService } from '../../websockets.service'
 import { collaborativeResource } from '../collaborative-resource'
@@ -25,12 +27,15 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
                     callback?.({ acquired: false, lock: null })
                     return
                 }
-                if (!websocketService.socketHasPermission({ socket, permission: resource.writePermission })) {
+                const canWriteResource = await websocketService.userHasPermission({ userId: principal.id, projectId, permission: resource.writePermission, log: app.log })
+                    && await canEditFlowResource({ flow: resource.flow, userId: principal.id, projectId, log: app.log })
+                if (!canWriteResource) {
                     app.log.debug({ resourceId, user: { id: principal.id }, project: { id: projectId } }, '[LOCK_RESOURCE] Denied: missing write permission')
                     callback?.({ acquired: false, lock: null })
                     return
                 }
 
+                await websocketService.joinResourceRoom({ socket, resourceId, flow: resource.flow, userId: principal.id, projectId, log: app.log })
                 const user = await userService(app.log).getMetaInformation({ id: principal.id })
                 const displayName = `${user.firstName} ${user.lastName}`
 
@@ -45,7 +50,7 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
 
                 if (result.acquired) {
                     trackLockedResource({ socket, resourceId, editorSessionId: editorSessionId ?? null })
-                    socket.to(projectId).emit(WebsocketClientEvent.RESOURCE_LOCKED, {
+                    socket.to([projectId, websocketService.resourceRoom(resourceId)]).emit(WebsocketClientEvent.RESOURCE_LOCKED, {
                         resourceId,
                         userId: principal.id,
                         userDisplayName: displayName,
@@ -78,7 +83,7 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
                 })
                 untrackLockedResource({ socket, resourceId })
                 if (released) {
-                    websocketService.to(projectId).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
+                    websocketService.toResourceAudience({ projectId, resourceId }).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
                         resourceId,
                     })
                 }
@@ -88,6 +93,14 @@ export const lockModule: FastifyPluginAsyncZod = async (app) => {
             }
         }
     })
+}
+
+async function canEditFlowResource({ flow, userId, projectId, log }: CanEditFlowResourceParams): Promise<boolean> {
+    if (isNil(flow)) {
+        return true
+    }
+    const access = await accessGuard(log).forUser({ userId, projectId })
+    return accessPolicy.canOnFlow({ access, flow, capability: 'EDIT' })
 }
 
 const lockedResourcesBySocket = new WeakMap<Socket, ReadonlyMap<string, string | null>>()
@@ -121,12 +134,19 @@ function registerLockDisconnectHandler({ socket, userId, projectId, app }: Regis
                 editorSessionId,
             })
             if (released) {
-                websocketService.to(projectId).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
+                websocketService.toResourceAudience({ projectId, resourceId }).emit(WebsocketClientEvent.RESOURCE_UNLOCKED, {
                     resourceId,
                 })
             }
         }
     })
+}
+
+type CanEditFlowResourceParams = {
+    flow: FlowRef | null
+    userId: string
+    projectId: string
+    log: FastifyBaseLogger
 }
 
 type TrackParams = {

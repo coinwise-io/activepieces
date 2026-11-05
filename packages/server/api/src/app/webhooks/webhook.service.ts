@@ -16,6 +16,7 @@ import { engineResponseWatcher } from '../workers/engine-response-watcher'
 import { jobQueue, JobType } from '../workers/job-queue/job-queue'
 import { payloadOffloader } from '../workers/payload-offloader'
 import { webhookHandshake } from './webhook-handshake'
+import { webhookRunOwner } from './webhook-run-owner'
 
 const WEBHOOK_TIMEOUT_MS = system.getNumberOrThrow(AppSystemProp.WEBHOOK_TIMEOUT_SECONDS) * 1000
 const MAX_PAYLOAD_SIZE_BYTES = system.getNumberOrThrow(AppSystemProp.MAX_WEBHOOK_PAYLOAD_SIZE_MB) * 1024 * 1024
@@ -55,6 +56,7 @@ export const webhookService = {
         parentRunId,
         failParentOnFailure,
         timeoutMs,
+        triggeredBy,
     }: HandleWebhookParams): Promise<EngineHttpResponse> {
         const webhookHeader = 'x-webhook-id'
         const webhookRequestId = apId()
@@ -160,6 +162,9 @@ export const webhookService = {
 
         if (async) {
             wideEvent.set({ webhook: { mode: 'async' } })
+            if (!isNil(triggeredBy)) {
+                await webhookRunOwner.remember({ requestId: webhookRequestId, userId: triggeredBy })
+            }
             return handleAsync({
                 flow,
                 saveSampleData,
@@ -193,6 +198,7 @@ export const webhookService = {
             parentRunId,
             failParentOnFailure,
             timeoutMs,
+            triggeredBy,
         })
         return {
             status: flowHttpResponse.status,
@@ -244,7 +250,7 @@ async function handleAsync(params: AsyncWebhookParams): Promise<EngineHttpRespon
 }
 
 async function handleSync(params: SyncWebhookParams): Promise<EngineHttpResponse> {
-    const { payload, projectId, flow, logger, webhookRequestId, workerHandlerId, flowVersionIdToRun, runEnvironment, saveSampleData, flowVersionToRun, parentRunId, failParentOnFailure, platformId, timeoutMs } = params
+    const { payload, projectId, flow, logger, webhookRequestId, workerHandlerId, flowVersionIdToRun, runEnvironment, saveSampleData, flowVersionToRun, parentRunId, failParentOnFailure, platformId, timeoutMs, triggeredBy } = params
 
     if (saveSampleData) {
         rejectedPromiseHandler(savePayload({
@@ -312,6 +318,7 @@ async function handleSync(params: SyncWebhookParams): Promise<EngineHttpResponse
         streamStepProgress: StreamStepProgress.NONE,
         parentRunId,
         failParentOnFailure,
+        triggeredBy,
     })
 
     wideEvent.set({ flowRun: { id: createdRun.id } })
@@ -357,6 +364,7 @@ type HandleWebhookParams = {
     parentRunId?: string
     failParentOnFailure: boolean
     timeoutMs?: number
+    triggeredBy?: string
 }
 
 type AsyncWebhookParams = {
@@ -390,4 +398,5 @@ type SyncWebhookParams = {
     parentRunId?: string
     failParentOnFailure: boolean
     timeoutMs?: number
+    triggeredBy?: string
 }

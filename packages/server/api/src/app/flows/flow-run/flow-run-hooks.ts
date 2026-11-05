@@ -16,7 +16,7 @@ export const flowRunHooks = (log: FastifyBaseLogger) => ({
         const isPieceTrigger = !isNil(flowVersion) && flowVersion.trigger.type === FlowTriggerType.PIECE && !isNil(flowVersion.trigger.settings.triggerName) 
         const isManualTrigger = isPieceTrigger && isManualPieceTrigger({ pieceName: flowVersion.trigger.settings.pieceName, triggerName: flowVersion.trigger.settings.triggerName })
         if (flowRun.environment === RunEnvironment.TESTING || isManualTrigger) {
-            websocketService.to(flowRun.projectId).emit(WebsocketClientEvent.UPDATE_RUN_PROGRESS, {
+            websocketService.toRunViewers({ projectId: flowRun.projectId, triggeredBy: flowRun.triggeredBy }).emit(WebsocketClientEvent.UPDATE_RUN_PROGRESS, {
                 flowRun,
             })
         }

@@ -1,31 +1,47 @@
 import { ActivepiecesError, ErrorCode, isNil, Permission, ProjectId, UserId } from '@activepieces/core-utils'
-import { DefaultProjectRole, PlatformRole, Principal, PrincipalType, Project, rolePermissions, User } from '@activepieces/shared'
+import { DefaultProjectRole, PlatformRole, Principal, PrincipalType, rolePermissions, User } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
+import { ProjectAccess } from '../access-control/access-policy'
+import { accessResolver } from '../access-control/access-resolver'
 import { userService } from '../user/user-service'
 import { projectService } from './project-service'
 
+const resolvedByPrincipal = new WeakMap<Principal, Map<ProjectId, Promise<ProjectAccess | null>>>()
+
 export const projectAccess = (log: FastifyBaseLogger) => ({
-    async getRole({ userId, projectId }: GetRoleParams): Promise<DefaultProjectRole | null> {
+    async resolveForUser({ userId, projectId }: ResolveForUserParams): Promise<ProjectAccess | null> {
         const project = await projectService(log).getOneOrThrow(projectId)
         const user = await userService(log).getOneOrFail({ id: userId })
-        return roleOf({ user, project })
+        return accessResolver.resolve({ user, project })
+    },
+
+    async resolveForPrincipal({ principal, projectId }: ResolveForPrincipalParams): Promise<ProjectAccess> {
+        if (principal.type !== PrincipalType.USER) {
+            return accessResolver.unrestrictedForNonUser()
+        }
+        const cache = resolvedByPrincipal.get(principal) ?? new Map<ProjectId, Promise<ProjectAccess | null>>()
+        resolvedByPrincipal.set(principal, cache)
+        const cached = cache.get(projectId) ?? this.resolveForUser({ userId: principal.id, projectId })
+        cache.set(projectId, cached)
+        const access = await cached
+        if (isNil(access)) {
+            throw new ActivepiecesError({
+                code: ErrorCode.AUTHORIZATION,
+                params: {
+                    message: 'No role found for the user',
+                    userId: principal.id,
+                    projectId,
+                },
+            })
+        }
+        return access
     },
 
     async assertPrincipalAccessToProject({ principal, permission, projectId }: AssertPrincipalAccessParams): Promise<void> {
         switch (principal.type) {
             case PrincipalType.USER: {
-                const role = await this.getRole({ userId: principal.id, projectId })
-                if (isNil(role)) {
-                    throw new ActivepiecesError({
-                        code: ErrorCode.AUTHORIZATION,
-                        params: {
-                            message: 'No role found for the user',
-                            userId: principal.id,
-                            projectId,
-                        },
-                    })
-                }
-                if (!isNil(permission) && !roleHasPermission({ role, permission })) {
+                const access = await this.resolveForPrincipal({ principal, projectId })
+                if (!isNil(permission) && !access.permissions.includes(permission)) {
                     throw new ActivepiecesError({
                         code: ErrorCode.PERMISSION_DENIED,
                         params: {
@@ -76,19 +92,9 @@ export const projectAccess = (log: FastifyBaseLogger) => ({
 
     hasPermissionOnAnyProject({ user, permission }: HasPermissionOnAnyProjectParams): boolean {
         const role = platformWideRoleOf(user)
-        return !isNil(role) && roleHasPermission({ role, permission })
+        return !isNil(role) && rolePermissions[role].includes(permission)
     },
 })
-
-function roleOf({ user, project }: { user: User, project: Project }): DefaultProjectRole | null {
-    if (user.id === project.ownerId) {
-        return DefaultProjectRole.ADMIN
-    }
-    if (user.platformId !== project.platformId) {
-        return null
-    }
-    return platformWideRoleOf(user)
-}
 
 function platformWideRoleOf(user: User): DefaultProjectRole | null {
     switch (user.platformRole) {
@@ -101,12 +107,13 @@ function platformWideRoleOf(user: User): DefaultProjectRole | null {
     }
 }
 
-function roleHasPermission({ role, permission }: { role: DefaultProjectRole, permission: Permission }): boolean {
-    return rolePermissions[role].includes(permission)
+type ResolveForUserParams = {
+    userId: UserId
+    projectId: ProjectId
 }
 
-type GetRoleParams = {
-    userId: UserId
+type ResolveForPrincipalParams = {
+    principal: Principal
     projectId: ProjectId
 }
 

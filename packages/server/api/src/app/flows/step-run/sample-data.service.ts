@@ -30,7 +30,7 @@ export const sampleDataService = (log: FastifyBaseLogger) => ({
                 type: fileType,
             })
 
-            if (isNil(response)) {
+            if (isNil(response) || response.metadata?.flowId !== params.flowVersion.flowId) {
                 return undefined
             }
             if (response.metadata?.[DATA_TYPE_KEY_IN_FILE_METADATA] === SampleDataDataType.STRING) {

@@ -44,9 +44,9 @@ export const FLOW_CARD_HEIGHT = 70;
 const FlowRunCard = React.memo(
   ({ run, viewedRunId, refetchRuns }: FlowRunCardProps) => {
     const { Icon, variant } = flowRunUtils.getStatusIcon(run.status);
-    const userHasPermissionToRetryRun = useAuthorization().checkAccess(
-      Permission.WRITE_RUN,
-    );
+    const { checkAccess } = useAuthorization();
+    const userHasPermissionToRetryRun =
+      checkAccess(Permission.WRITE_RUN) || checkAccess(Permission.EXECUTE_FLOW);
     const projectId = authenticationSession.getProjectId();
     const navigate = useNavigate();
 

@@ -1,5 +1,7 @@
 import { Permission, PrincipalType, TestFlowRunRequestBody, WebsocketClientEvent, WebsocketServerEvent } from '@activepieces/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
+import { accessGuard } from '../access-control/access-guard'
+import { accessPolicy } from '../access-control/access-policy'
 import { websocketService } from '../core/websockets.service'
 import { flowVersionController } from './flow/flow-version.controller'
 import { flowController } from './flow/flow.controller'
@@ -10,10 +12,15 @@ export const flowModule: FastifyPluginAsyncZod = async (app) => {
     await app.register(flowVersionController, { prefix: '/v1/flows' })
     await app.register(flowController, { prefix: '/v1/flows' })
     await app.register(sampleDataController, { prefix: '/v1/sample-data' })
-    // Membership-only by design: a test run mirrors the membership-only
-    // /v1/sample-data/test-step route. Only production manual runs require WRITE_RUN.
     websocketService.addListener(PrincipalType.USER, WebsocketServerEvent.TEST_FLOW_RUN, (socket) => {
         return async (data: TestFlowRunRequestBody, principal, projectId) => {
+            const guard = accessGuard(app.log)
+            await guard.assertFlowByVersionId({
+                access: await guard.forUser({ userId: principal.id, projectId }),
+                projectId,
+                flowVersionId: data.flowVersionId,
+                capability: 'EDIT',
+            })
             const flowRun = await flowRunService(app.log).test({
                 projectId,
                 flowVersionId: data.flowVersionId,
@@ -24,12 +31,22 @@ export const flowModule: FastifyPluginAsyncZod = async (app) => {
     })
     websocketService.addListener(PrincipalType.USER, WebsocketServerEvent.MANUAL_TRIGGER_RUN_STARTED, (socket) => {
         return async (data: TestFlowRunRequestBody, principal, projectId) => {
+            const guard = accessGuard(app.log)
+            const access = await guard.forUser({ userId: principal.id, projectId })
+            const flow = await guard.assertFlowByVersionId({
+                access,
+                projectId,
+                flowVersionId: data.flowVersionId,
+                capability: 'EXECUTE',
+                permission: Permission.EXECUTE_FLOW,
+            })
             const flowRun = await flowRunService(app.log).startManualTrigger({
                 projectId,
                 flowVersionId: data.flowVersionId,
                 triggeredBy: principal.id,
+                restrictToPublished: !accessPolicy.canOnFlow({ access, flow, capability: 'EDIT' }),
             })
             socket.emit(WebsocketClientEvent.MANUAL_TRIGGER_RUN_STARTED, flowRun)
         }
-    }, Permission.WRITE_RUN)
+    }, Permission.EXECUTE_FLOW)
 }

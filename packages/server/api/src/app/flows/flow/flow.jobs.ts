@@ -76,6 +76,8 @@ export const flowBackgroundJobs = (log: FastifyBaseLogger) => ({
         await batchDeleteByFlowId(flow.id)
         await flowRepo().delete({ id: flow.id })
         await flowExecutionCache(log).invalidate(flow.id)
+        const { websocketService } = await import('../../core/websockets.service')
+        await websocketService.refreshAccessForProject({ projectId: flow.projectId, log })
     },
 
     reapTombstonedFlows: async () => {

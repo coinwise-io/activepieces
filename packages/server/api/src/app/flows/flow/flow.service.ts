@@ -4,6 +4,7 @@ import { CreateFlowRequest, Flow, FlowCreator, FlowOperationRequest, FlowOperati
 import dayjs from 'dayjs'
 import { FastifyBaseLogger } from 'fastify'
 import { EntityManager, In, IsNull, Not } from 'typeorm'
+import { accessPolicy, ProjectAccess } from '../../access-control/access-policy'
 import { transaction } from '../../core/db/transaction'
 import { distributedLock } from '../../database/redis-connections'
 import { buildPaginator } from '../../helper/pagination/build-paginator'
@@ -115,6 +116,7 @@ export const flowService = (log: FastifyBaseLogger) => ({
         includeTriggerSource = true,
         sortBy,
         order,
+        access,
     }: ListParams): Promise<SeekPage<PopulatedFlow>> {
         assertSortIsNotCombinedWithCursor({ sortBy, cursor: cursorRequest })
         const decodedCursor = paginationHelper.decodeCursor(cursorRequest)
@@ -141,6 +143,10 @@ export const flowService = (log: FastifyBaseLogger) => ({
             queryBuilder
                 .innerJoin('project', 'project', 'project.id = ff."projectId"')
                 .andWhere('project."platformId" = :platformId', { platformId })
+        }
+
+        if (!isNil(access)) {
+            accessPolicy.applyFlowScope({ queryBuilder, access, flowAlias: 'ff', capability: 'SEE' })
         }
 
         if (folderId !== undefined) {
@@ -408,6 +414,8 @@ export const flowService = (log: FastifyBaseLogger) => ({
                     folderId,
                 })
                 log.info({ flow: { id }, folderId }, 'Flow moved to folder')
+                const { websocketService } = await import('../../core/websockets.service')
+                await websocketService.refreshAccessForProject({ projectId, log })
                 break
             }
 
@@ -602,6 +610,8 @@ export const flowService = (log: FastifyBaseLogger) => ({
         })
         await flowExecutionCache(log).invalidate(id)
         await this.addDeleteFlowJob(flow)
+        const { websocketService } = await import('../../core/websockets.service')
+        await websocketService.refreshAccessForProject({ projectId, log })
         log.info({ flow: { id }, project: { id: projectId } }, 'Flow deletion requested')
         if (!isNil(deletedFlow)) {
             flowSideEffects(log).onDeleted({
@@ -655,16 +665,27 @@ export const flowService = (log: FastifyBaseLogger) => ({
         return template
     },
 
-    async count({ projectId, folderId, status }: CountParams): Promise<number> {
-        if (folderId === undefined) {
-            return flowRepo().countBy({ projectId, status })
-        }
+    async count({ projectId, folderId, status, access }: CountParams): Promise<number> {
+        if (isNil(access)) {
+            if (folderId === undefined) {
+                return flowRepo().countBy({ projectId, status })
+            }
 
-        return flowRepo().countBy({
-            folderId: folderId !== UncategorizedFolderId ? folderId : IsNull(),
-            projectId,
-            status,
-        })
+            return flowRepo().countBy({
+                folderId: folderId !== UncategorizedFolderId ? folderId : IsNull(),
+                projectId,
+                status,
+            })
+        }
+        const queryBuilder = flowRepo().createQueryBuilder('ff').where({ projectId })
+        if (status !== undefined) {
+            queryBuilder.andWhere({ status })
+        }
+        if (folderId !== undefined) {
+            queryBuilder.andWhere({ folderId: folderId !== UncategorizedFolderId ? folderId : IsNull() })
+        }
+        accessPolicy.applyFlowScope({ queryBuilder, access, flowAlias: 'ff', capability: 'SEE' })
+        return queryBuilder.getCount()
     },
 
     async existsByProjectAndStatus(params: ExistsByProjectAndStatusParams): Promise<boolean> {
@@ -972,6 +993,7 @@ type ListParamsBase = {
     includeTriggerSource?: boolean
     sortBy?: 'NAME'
     order?: 'ASC' | 'DESC'
+    access?: ProjectAccess
 }
 
 type ListParams = ListParamsBase & (
@@ -1003,6 +1025,7 @@ type CountParams = {
     projectId: ProjectId
     folderId?: string
     status?: FlowStatus
+    access?: ProjectAccess
 }
 
 type UpdateParams = EventEmissionParams & {

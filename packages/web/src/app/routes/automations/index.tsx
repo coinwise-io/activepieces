@@ -30,6 +30,7 @@ import {
   useAutomationsSelection,
   hasExportableItems,
   hasMovableItems,
+  canModifySelection,
 } from '@/features/automations/hooks/use-automations-selection';
 import { usePinnedItems } from '@/features/automations/hooks/use-pinned-items';
 import { AutomationsSort, TreeItem } from '@/features/automations/lib/types';
@@ -404,6 +405,7 @@ const AutomationsPageContent = ({ projectId }: { projectId: string }) => {
             onCreateInFolder={handleCreateInFolder}
             userHasPermissionToWriteFlow={userHasPermissionToWriteFlow}
             userHasPermissionToWriteTable={userHasPermissionToWriteTable}
+            userHasPermissionToWriteFolder={userHasPermissionToWriteFolder}
             userHasPermissionToWriteAgent={userHasPermissionToWriteAgent}
             agentsVisible={agentsVisible}
             isCreatingFlow={mutations.isCreateFlowPending}
@@ -442,6 +444,13 @@ const AutomationsPageContent = ({ projectId }: { projectId: string }) => {
         isDeleting={mutations.isDeleting}
         isMoving={mutations.isMoving}
         isExporting={mutations.isExporting}
+        canModify={canModifySelection({
+          selected: selectedItems,
+          canWriteFlow: userHasPermissionToWriteFlow,
+          canWriteTable: userHasPermissionToWriteTable,
+          canWriteFolder: userHasPermissionToWriteFolder,
+          canWriteAgent: userHasPermissionToWriteAgent,
+        })}
         hasMovableItems={hasMovableItems(selectedItems)}
         hasExportableItems={hasExportableItems(selectedItems)}
         onMoveClick={() => dialogs.setMoveToDialogOpen(true)}

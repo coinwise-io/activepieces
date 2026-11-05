@@ -3,6 +3,7 @@ import {
     DataSource,
     EntitySchema,
 } from 'typeorm'
+import { AccessGrantEntity } from '../access-control/access-grant.entity'
 import { AIProviderEntity } from '../ai/ai-provider-entity'
 import { AiToolConfigEntity } from '../ai/ai-tool-config-entity'
 import { PlatformModelTierEntity } from '../ai/platform-model-tier-entity'
@@ -112,6 +113,7 @@ function getEntities(): EntitySchema<unknown>[] {
         UserGroupEntity,
         UserGroupMemberEntity,
         UserMfaEntity,
+        AccessGrantEntity,
     ]
 }
 

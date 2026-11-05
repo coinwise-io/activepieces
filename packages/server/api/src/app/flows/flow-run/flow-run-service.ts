@@ -1,9 +1,10 @@
-import { ActivepiecesError, apId, ApId, Cursor, ErrorCode, FlowId, FlowRunId, FlowVersionId, isEmpty, isNil, PlatformId, ProjectId, SeekPage } from '@activepieces/core-utils'
+import { ActivepiecesError, apId, ApId, Cursor, ErrorCode, FlowId, FlowRunId, FlowVersionId, isEmpty, isManualPieceTrigger, isNil, PlatformId, ProjectId, SeekPage } from '@activepieces/core-utils'
 import { apDayjs, apDayjsDuration, wideEvent } from '@activepieces/server-utils'
-import { ExecuteFlowJobData, ExecutionType, ExecutioOutputFile, FAILED_STATES, FileCompression, FileType, FlowRetryStrategy, FlowRun, FlowRunCountByStatus, FlowRunStatus, FlowRunWithRetryError, flowStructureUtil, FlowVersion, GenericStepOutput, isFlowRunStateTerminal, JobPayload, LATEST_JOB_DATA_SCHEMA_VERSION, logSerializer, LogSliceRef, ResumeReason, RunEnvironment, RunInternalError, SampleDataFileType, StepOutput, StepOutputStatus, StepOutputType, StreamStepProgress, WorkerJobType } from '@activepieces/shared'
+import { ExecuteFlowJobData, ExecutionType, ExecutioOutputFile, FAILED_STATES, FileCompression, FileType, Flow, FlowRetryStrategy, FlowRun, FlowRunCountByStatus, FlowRunStatus, FlowRunWithRetryError, FlowStatus, flowStructureUtil, FlowTriggerType, FlowVersion, GenericStepOutput, isFlowRunStateTerminal, JobPayload, LATEST_JOB_DATA_SCHEMA_VERSION, logSerializer, LogSliceRef, ResumeReason, RunEnvironment, RunInternalError, SampleDataFileType, StepOutput, StepOutputStatus, StepOutputType, StreamStepProgress, WorkerJobType } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import pLimit from 'p-limit'
 import { ArrayContains, In, IsNull, Not, Repository, SelectQueryBuilder } from 'typeorm'
+import { accessPolicy, ProjectAccess, RunScope } from '../../access-control/access-policy'
 import { repoFactory } from '../../core/db/repo-factory'
 import { distributedLock } from '../../database/redis-connections'
 import { fileCompressor } from '../../file/file-compressor'
@@ -120,6 +121,9 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             query = query.andWhere({
                 id: In(params.flowRunIds),
             })
+        }
+        if (!isNil(params.access)) {
+            accessPolicy.applyRunScope({ queryBuilder: query, access: params.access, runAlias: 'flow_run', projectId: params.projectId, scope: 'READ' })
         }
 
         const { data, cursor: newCursor } = await paginator.paginate(query)
@@ -240,13 +244,16 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
                     projectId: oldFlowRun.projectId,
                     failParentOnFailure: oldFlowRun.failParentOnFailure,
                     parentRunId: oldFlowRun.parentRunId,
+                    triggeredBy: oldFlowRun.triggeredBy ?? undefined,
                 })
             }
         }
     },
-    async cancel({ projectId, platformId, flowRunIds, excludeFlowRunIds, status, flowId, createdAfter, createdBefore }: CancelParams): Promise<void> {
+    async cancel({ projectId, platformId, flowRunIds, excludeFlowRunIds, status, flowId, createdAfter, createdBefore, access }: CancelParams): Promise<void> {
         const filteredStatus = status ?? CANCELLABLE_STATUSES
         const flowRuns = await filterFlowRunsAndApplyFilters({
+            access,
+            scope: 'MANAGE',
             projectId,
             flowRunIds,
             status: filteredStatus,
@@ -270,11 +277,15 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             throw canceChildlPromises.find(r => r.status === 'rejected')!.reason
         }
     },
+    async getTriggeredBy({ runId, projectId }: { runId: FlowRunId, projectId: ProjectId }): Promise<string | null> {
+        const run = await flowRunRepo().findOne({ select: { id: true, triggeredBy: true }, where: { id: runId, projectId } })
+        return run?.triggeredBy ?? null
+    },
     async existsBy(runId: FlowRunId): Promise<boolean> {
         return flowRunRepo().existsBy({ id: runId })
     },
     async bulkArchive(params: BulkArchiveActionParams): Promise<void> {
-        const filteredFlowRuns = await filterFlowRunsAndApplyFilters(params)
+        const filteredFlowRuns = await filterFlowRunsAndApplyFilters({ ...params, scope: 'MANAGE' })
         await flowRunRepo().update({
             id: In(filteredFlowRuns.map(flowRun => flowRun.id)),
             projectId: params.projectId,
@@ -288,7 +299,7 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         if (isFromFailedStepByFilter && isEmpty(statusFilter)) {
             return []
         }
-        const filteredFlowRuns = await filterFlowRunsAndApplyFilters({ ...params, status: statusFilter })
+        const filteredFlowRuns = await filterFlowRunsAndApplyFilters({ ...params, status: statusFilter, scope: 'RETRY' })
         const limit = pLimit(10)
         const results = await Promise.allSettled(
             filteredFlowRuns.map(flowRun =>
@@ -324,6 +335,7 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         platformId,
         stepNameToTest,
         environment,
+        triggeredBy,
     }: StartParams): Promise<FlowRun> {
         const newFlowRun = await queueOrCreateInstantly({
             projectId,
@@ -333,6 +345,7 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             failParentOnFailure,
             stepNameToTest,
             environment,
+            triggeredBy,
         }, log)
 
         wideEvent.set({
@@ -424,9 +437,12 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             }) : undefined,
         }, log)
     },
-    async startManualTrigger({ projectId, flowVersionId, triggeredBy }: StartManualTriggerParams): Promise<FlowRun> {
+    async startManualTrigger({ projectId, flowVersionId, triggeredBy, restrictToPublished }: StartManualTriggerParams): Promise<FlowRun> {
         const flowVersion = await flowVersionService(log).getOneOrThrow(flowVersionId)
-        await flowService(log).getOneOrThrow({ id: flowVersion.flowId, projectId })
+        const flow = await flowService(log).getOneOrThrow({ id: flowVersion.flowId, projectId })
+        if (restrictToPublished) {
+            assertPublishedManualRun({ flow, flowVersion })
+        }
         const triggerPayload = {}
         const platformId = await projectService(log).getPlatformId(projectId)
 
@@ -514,6 +530,9 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
             })
             .groupBy('flow_run.status')
 
+        if (!isNil(params.access)) {
+            accessPolicy.applyRunScope({ queryBuilder: query, access: params.access, runAlias: 'flow_run', projectId: params.projectId, scope: 'READ' })
+        }
         if (params.createdAfter) {
             query = query.andWhere('flow_run.created >= :createdAfter', { createdAfter: params.createdAfter })
         }
@@ -562,6 +581,20 @@ export async function cancelSingleRun(log: FastifyBaseLogger, flowRun: FlowRun, 
         flowRun: { id: flowRun.id },
         flow: { id: flowRun.flowId },
     }, 'Flow run cancelled')
+}
+
+function assertPublishedManualRun({ flow, flowVersion }: { flow: Flow, flowVersion: FlowVersion }): void {
+    const trigger = flowVersion.trigger
+    const isManualTrigger = trigger.type === FlowTriggerType.PIECE
+        && !isNil(trigger.settings.triggerName)
+        && isManualPieceTrigger({ pieceName: trigger.settings.pieceName, triggerName: trigger.settings.triggerName })
+    const runnable = flow.status === FlowStatus.ENABLED && flow.publishedVersionId === flowVersion.id && isManualTrigger
+    if (!runnable) {
+        throw new ActivepiecesError({
+            code: ErrorCode.ENTITY_NOT_FOUND,
+            params: { entityType: 'flow_version', entityId: flowVersion.id },
+        })
+    }
 }
 
 async function getAllChildRuns(parentRunIds: string[]): Promise<FlowRun[]> {
@@ -664,6 +697,9 @@ async function filterFlowRunsAndApplyFilters(
         query = query.andWhere('flow_run."failedStep"->>\'message\' ILIKE :failedStepMessage', {
             failedStepMessage: `%${params.failedStepMessage}%`,
         })
+    }
+    if (!isNil(params.access)) {
+        accessPolicy.applyRunScope({ queryBuilder: query, access: params.access, runAlias: 'flow_run', projectId: params.projectId, scope: params.scope })
     }
 
     const flowRuns = await query.getMany()
@@ -881,6 +917,7 @@ type ListParams = {
     includeArchived?: boolean
     environment?: RunEnvironment
     parentWaitpointId?: ApId
+    access?: ProjectAccess
 }
 
 type GetOneParams = {
@@ -948,6 +985,7 @@ type StartParams = {
     httpRequestId: string | undefined
     streamStepProgress: StreamStepProgress
     sampleData?: Record<string, unknown>
+    triggeredBy?: string
 }
 
 
@@ -964,6 +1002,7 @@ type StartManualTriggerParams = {
     projectId: ProjectId
     flowVersionId: FlowVersionId
     triggeredBy: string
+    restrictToPublished: boolean
 }
 type RetryParams = {
     flowRunId: FlowRunId
@@ -980,9 +1019,11 @@ type CancelParams = {
     flowId?: FlowId[]
     createdAfter?: string
     createdBefore?: string
+    access?: ProjectAccess
 }
 
 type BulkRetryParams = {
+    access?: ProjectAccess
     projectId: ProjectId
     flowRunIds?: FlowRunId[]
     strategy: FlowRetryStrategy
@@ -997,6 +1038,7 @@ type BulkRetryParams = {
 }
 
 type BulkArchiveActionParams = {
+    access?: ProjectAccess
     projectId: ProjectId
     flowRunIds?: FlowRunId[]
     status?: FlowRunStatus[]
@@ -1010,12 +1052,15 @@ type BulkArchiveActionParams = {
 }
 
 type CountByStatusParams = {
+    access?: ProjectAccess
     projectId: ProjectId
     createdAfter?: string
     createdBefore?: string
 }
 
 type FilterFlowRunsAndApplyFiltersParams = {
+    access?: ProjectAccess
+    scope: RunScope
     projectId: ProjectId
     flowRunIds?: FlowRunId[]
     status?: FlowRunStatus[]

@@ -4,6 +4,7 @@ import { FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
 import { system } from '../../helper/system/system'
@@ -15,7 +16,9 @@ const DEFAULT_PAGING_LIMIT = 10
 
 export const flowRunController: FastifyPluginAsyncZod = async (app) => {
     app.get('/', ListRequest, async (request) => {
+        const access = await accessGuard(request.log).forRequest({ request })
         return flowRunService(request.log).list({
+            access,
             projectId: request.query.projectId,
             flowId: request.query.flowId,
             tags: request.query.tags,
@@ -34,7 +37,9 @@ export const flowRunController: FastifyPluginAsyncZod = async (app) => {
     })
 
     app.get('/count-by-status', CountByStatusRouteConfig, async (request) => {
+        const access = await accessGuard(request.log).forRequest({ request })
         const data = await flowRunService(request.log).countByStatus({
+            access,
             projectId: request.query.projectId,
             createdAfter: request.query.createdAfter,
             createdBefore: request.query.createdBefore,
@@ -46,6 +51,12 @@ export const flowRunController: FastifyPluginAsyncZod = async (app) => {
         '/:id',
         GetRequest,
         async (request, reply) => {
+            const guard = accessGuard(request.log)
+            const access = await guard.forRequest({ request })
+            if (!access.unrestricted) {
+                const run = await flowRunService(request.log).getOneOrThrow({ projectId: request.projectId, id: request.params.id })
+                await guard.assertRun({ access, projectId: request.projectId, run, scope: 'READ', permission: Permission.READ_RUN })
+            }
             const flowRun = await flowRunService(request.log).getOnePopulatedOrThrow({
                 projectId: request.projectId,
                 id: request.params.id,
@@ -57,6 +68,12 @@ export const flowRunController: FastifyPluginAsyncZod = async (app) => {
     )
 
     app.post('/:id/retry', RetryFlowRequest, async (req) => {
+        const guard = accessGuard(req.log)
+        const access = await guard.forRequest({ request: req })
+        if (!access.unrestricted) {
+            const run = await flowRunService(req.log).getOneOrThrow({ projectId: req.projectId, id: req.params.id })
+            await guard.assertRun({ access, projectId: req.projectId, run, scope: 'RETRY', permission: Permission.EXECUTE_FLOW })
+        }
         const flowRun = await flowRunService(req.log).retry({
             flowRunId: req.params.id,
             strategy: req.body.strategy,
@@ -78,6 +95,7 @@ export const flowRunController: FastifyPluginAsyncZod = async (app) => {
 
     app.post('/cancel', BulkCancelFlowRequest, async (req) => {
         return flowRunService(req.log).cancel({
+            access: await accessGuard(req.log).forRequest({ request: req }),
             projectId: req.projectId,
             platformId: req.principal.platform.id,
             flowRunIds: req.body.flowRunIds,
@@ -91,6 +109,7 @@ export const flowRunController: FastifyPluginAsyncZod = async (app) => {
 
     app.post('/retry', BulkRetryFlowRequest, async (req) => {
         return flowRunService(req.log).bulkRetry({
+            access: await accessGuard(req.log).forRequest({ request: req }),
             projectId: req.projectId,
             flowRunIds: req.body.flowRunIds,
             excludeFlowRunIds: req.body.excludeFlowRunIds,
@@ -106,6 +125,7 @@ export const flowRunController: FastifyPluginAsyncZod = async (app) => {
 
     app.post('/archive', ArchiveFlowRunRequest, async (req) => {
         return flowRunService(req.log).bulkArchive({
+            access: await accessGuard(req.log).forRequest({ request: req }),
             projectId: req.projectId,
             flowRunIds: req.body.flowRunIds,
             excludeFlowRunIds: req.body.excludeFlowRunIds,
@@ -175,7 +195,7 @@ const RetryFlowRequest = {
     config: {
         security: securityAccess.project(
             [PrincipalType.USER, PrincipalType.SERVICE], 
-            Permission.WRITE_RUN, {
+            Permission.EXECUTE_FLOW, {
                 type: ProjectResourceType.TABLE,
                 tableName: FlowRunEntity,
             }),
@@ -240,7 +260,7 @@ const BulkRetryFlowRequest = {
     config: {
         security: securityAccess.project(
             [PrincipalType.USER, PrincipalType.SERVICE],
-            Permission.WRITE_RUN, {
+            Permission.EXECUTE_FLOW, {
                 type: ProjectResourceType.BODY,
             }),
     },

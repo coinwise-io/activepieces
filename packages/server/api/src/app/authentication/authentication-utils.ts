@@ -39,6 +39,7 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
             platformId: params.platformId,
             userId: params.userId,
             isPrivileged: userService(log).isUserPrivileged(user),
+            includeGrantedProjects: true,
         })
         const project = isNil(params.projectId)
             ? findPersonalProject(projects, params.userId) ?? projects?.[0]

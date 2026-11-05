@@ -1,4 +1,5 @@
 import {
+  AccessTarget,
   AgentSummary,
   FolderDto,
   PopulatedFlow,
@@ -48,6 +49,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { AccessDialog, AccessMenuItem } from '@/features/access-control';
 import { AgentToolStack } from '@/features/agents/agent-tool-stack';
 import { DeleteAgentDialog } from '@/features/agents/delete-agent-dialog';
 import { MoveToFolderDialog } from '@/features/automations/components/move-to-folder-dialog';
@@ -55,6 +57,7 @@ import { FlowCreatedByBadge } from '@/features/flows/components/flow-created-by-
 import { FlowStatusToggle } from '@/features/flows/components/flow-status-toggle';
 import { ShareTemplateDialog } from '@/features/flows/components/share-template-dialog';
 import { PieceIconList } from '@/features/pieces/components/piece-icon-list';
+import { authenticationSession } from '@/lib/authentication-session';
 import { cn } from '@/lib/utils';
 
 import { TreeItem } from '../lib/types';
@@ -80,6 +83,7 @@ type AutomationsTableRowProps = {
   onCreateInFolder?: (folderId: string, kind: CreateInFolderKind) => void;
   userHasPermissionToWriteFlow?: boolean;
   userHasPermissionToWriteTable?: boolean;
+  userHasPermissionToWriteFolder?: boolean;
   userHasPermissionToWriteAgent: boolean;
   agentsVisible?: boolean;
   isCreatingFlow?: boolean;
@@ -107,6 +111,7 @@ export const AutomationsTableRow = ({
   onCreateInFolder,
   userHasPermissionToWriteFlow = true,
   userHasPermissionToWriteTable = true,
+  userHasPermissionToWriteFolder = true,
   userHasPermissionToWriteAgent,
   agentsVisible = false,
   isCreatingFlow,
@@ -121,6 +126,16 @@ export const AutomationsTableRow = ({
   const [moveFolderId, setMoveFolderId] = useState('');
   const [isCreateTooltipOpen, setIsCreateTooltipOpen] = useState(false);
   const [isDeleteAgentOpen, setIsDeleteAgentOpen] = useState(false);
+  const [isAccessOpen, setIsAccessOpen] = useState(false);
+
+  const canModifyItem =
+    item.type === 'folder'
+      ? userHasPermissionToWriteFolder
+      : item.type === 'flow'
+      ? userHasPermissionToWriteFlow
+      : item.type === 'table'
+      ? userHasPermissionToWriteTable
+      : true;
 
   if (item.type === 'load-more-folder') {
     return (
@@ -308,7 +323,7 @@ export const AutomationsTableRow = ({
               </DropdownMenuItem>
             )}
 
-            <DropdownMenuItem onClick={onRename}>
+            <DropdownMenuItem onClick={onRename} disabled={!canModifyItem}>
               <Pencil className="h-4 w-4 mr-2" />
               {t('Rename')}
             </DropdownMenuItem>
@@ -316,7 +331,7 @@ export const AutomationsTableRow = ({
             {isFlowItem(item) && !embedState.hideDuplicateFlow && (
               <DropdownMenuItem
                 onClick={() => onDuplicate(item.data)}
-                disabled={isDuplicating}
+                disabled={isDuplicating || !userHasPermissionToWriteFlow}
               >
                 {isDuplicating ? (
                   <LoadingSpinner className="mr-2" />
@@ -329,6 +344,7 @@ export const AutomationsTableRow = ({
 
             {item.type !== 'folder' && !embedState.hideFolders && (
               <DropdownMenuItem
+                disabled={!canModifyItem}
                 onClick={() => {
                   setMoveFolderId('');
                   setIsMoveOpen(true);
@@ -365,6 +381,14 @@ export const AutomationsTableRow = ({
               </ShareTemplateDialog>
             )}
 
+            {(isFlowItem(item) || item.type === 'folder') &&
+              !embedState.isEmbedded && (
+                <AccessMenuItem
+                  target={accessTargetOf(item)}
+                  onOpen={() => setIsAccessOpen(true)}
+                />
+              )}
+
             <DropdownMenuSeparator />
             {isAgentItem(item) ? (
               <DropdownMenuItem
@@ -385,6 +409,7 @@ export const AutomationsTableRow = ({
                 buttonText={t('Delete')}
               >
                 <DropdownMenuItem
+                  disabled={!canModifyItem}
                   onSelect={(e) => e.preventDefault()}
                   className="text-danger-11 focus:text-danger-11"
                 >
@@ -401,6 +426,15 @@ export const AutomationsTableRow = ({
             agent={item.data}
             open={isDeleteAgentOpen}
             onOpenChange={setIsDeleteAgentOpen}
+          />
+        )}
+
+        {(isFlowItem(item) || item.type === 'folder') && (
+          <AccessDialog
+            open={isAccessOpen}
+            onOpenChange={setIsAccessOpen}
+            target={accessTargetOf(item)}
+            entityName={item.name}
           />
         )}
 
@@ -478,6 +512,14 @@ const RowItemOwner = ({ item }: { item: TreeItem }) => {
   }
   return <span className="text-gray-11">-</span>;
 };
+
+function accessTargetOf(item: TreeItem): AccessTarget {
+  const projectId = authenticationSession.getProjectId() ?? '';
+  if (item.type === 'folder') {
+    return { projectId, folderId: item.id };
+  }
+  return { projectId, flowId: item.id };
+}
 
 function isFlowItem(
   item: TreeItem,

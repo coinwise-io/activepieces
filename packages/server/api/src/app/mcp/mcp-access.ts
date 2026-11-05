@@ -54,7 +54,7 @@ async function isUserPrivileged({ userId, log }: Omit<UserScope, 'platformId'>):
 async function listProjectsForUser({ platformId, userId, isPrivileged, log }: UserScope & {
     isPrivileged: boolean
 }): Promise<Project[]> {
-    const allProjects = await projectService(log).getAllForUser({ platformId, userId, isPrivileged })
+    const allProjects = await projectService(log).getAllForUser({ platformId, userId, isPrivileged, includeGrantedProjects: true })
     const projects = allProjects.filter((project) => isVisibleToUser({ project, userId }))
 
     return projects

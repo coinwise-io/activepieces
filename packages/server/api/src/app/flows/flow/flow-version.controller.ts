@@ -3,6 +3,7 @@ import { FlowVersionMetadata, ListFlowVersionRequest, PrincipalType } from '@act
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
+import { accessGuard } from '../../access-control/access-guard'
 import { ProjectResourceType } from '../../core/security/authorization/common'
 import { securityAccess } from '../../core/security/authorization/fastify-security'
 import { flowVersionService } from '../flow-version/flow-version.service'
@@ -18,6 +19,8 @@ export const flowVersionController: FastifyPluginAsyncZod = async (fastify) => {
             id: request.params.flowId,
             projectId: request.projectId,
         })
+        const guard = accessGuard(request.log)
+        guard.assertFlow({ access: await guard.forRequest({ request }), projectId: request.projectId, flow: { id: flow.id, folderId: flow.folderId ?? null }, capability: 'SEE' })
         return flowVersionService(request.log).list({
             flowId: flow.id,
             limit: request.query.limit ?? DEFAULT_PAGE_SIZE,

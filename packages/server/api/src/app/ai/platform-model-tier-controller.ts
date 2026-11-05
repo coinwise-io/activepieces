@@ -1,4 +1,4 @@
-import { ApId } from '@activepieces/core-utils'
+import { ApId, Permission } from '@activepieces/core-utils'
 import { CreatePlatformModelTierRequest, DeletePlatformModelTierRequest, PlatformModelTier, PlatformModelTierSummary, PrincipalType, ReorderPlatformModelTiersRequest, SERVICE_KEY_SECURITY_OPENAPI, UpdatePlatformModelTierRequest } from '@activepieces/shared'
 import { FastifyRequest } from 'fastify'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
@@ -37,7 +37,7 @@ const TierIdParams = z.object({
 
 const ListPlatformModelTiers = {
     config: {
-        security: securityAccess.project([PrincipalType.USER, PrincipalType.ENGINE], undefined, { type: ProjectResourceType.QUERY }),
+        security: securityAccess.project([PrincipalType.USER, PrincipalType.ENGINE], Permission.WRITE_FLOW, { type: ProjectResourceType.QUERY }),
     },
     schema: {
         querystring: z.object({

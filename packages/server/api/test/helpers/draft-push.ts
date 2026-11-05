@@ -11,12 +11,12 @@ function capture(): DraftPush[] {
 }
 
 function observe(onPush: (push: DraftPush) => void): void {
-    const realTo = websocketService.to
-    vi.spyOn(websocketService, 'to').mockImplementation((room) => {
-        const operator = realTo(room)
+    const realAudience = websocketService.toResourceAudience
+    vi.spyOn(websocketService, 'toResourceAudience').mockImplementation((params) => {
+        const operator = realAudience(params)
         vi.spyOn(operator, 'emit').mockImplementation((event, ...args) => {
             if (event === WebsocketClientEvent.FLOW_DRAFT_UPDATED) {
-                onPush({ room, payload: args[0] })
+                onPush({ room: params.projectId, payload: args[0] })
             }
             return true
         })

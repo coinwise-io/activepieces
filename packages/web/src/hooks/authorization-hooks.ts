@@ -1,44 +1,76 @@
 import { isNil, Permission } from '@activepieces/core-utils';
-import { ApEdition, ApFlagId, PlatformRole } from '@activepieces/shared';
-import { useQuery } from '@tanstack/react-query';
+import { PlatformRole } from '@activepieces/shared';
+import { createContext, useContext } from 'react';
 
-import { authenticationApi } from '@/api/authentication-api';
-import { platformApi } from '@/api/platforms-api';
-import { flagsHooks } from '@/hooks/flags-hooks';
+import { accessControlHooks } from '@/hooks/access-control-hooks';
 import { userHooks } from '@/hooks/user-hooks';
 import { authenticationSession } from '@/lib/authentication-session';
 
-export const useAuthorization = (projectId?: string) => {
-  const { data: edition } = flagsHooks.useFlag(ApFlagId.EDITION);
+const FlowAccessContext = createContext<string | undefined>(undefined);
 
-  const platformId = authenticationSession.getPlatformId();
+const FlowAccessProvider = FlowAccessContext.Provider;
+
+function isReadPermission(permission: Permission): boolean {
+  return permission.startsWith('READ_');
+}
+
+function resolvePermission({
+  permission,
+  permissions,
+  isLoading,
+}: {
+  permission: Permission;
+  permissions: Permission[] | undefined;
+  isLoading: boolean;
+}): boolean {
+  if (!isNil(permissions)) {
+    return permissions.includes(permission);
+  }
+  return isLoading && isReadPermission(permission);
+}
+
+const useEffectivePermissions = ({
+  projectId,
+  flowId,
+}: {
+  projectId?: string;
+  flowId?: string;
+}) => {
   const scopedProjectId = projectId ?? authenticationSession.getProjectId();
-  const { data: projectRole, isLoading } = useQuery({
-    queryKey: ['project-role', scopedProjectId],
-    queryFn: async () => {
-      const platform = await platformApi.getCurrentPlatform();
-      if (platform.plan.projectRolesEnabled) {
-        const projectRole = await authenticationApi.getCurrentProjectRole({
-          projectId: scopedProjectId ?? '',
-        });
-        return projectRole;
-      }
-      return null;
-    },
-    retry: false,
-    enabled:
-      !isNil(edition) && edition !== ApEdition.COMMUNITY && !isNil(platformId),
+  const platformId = authenticationSession.getPlatformId();
+  const enabled = !isNil(scopedProjectId) && !isNil(platformId);
+  const { data, isLoading, isError } = accessControlHooks.useEffectiveAccess({
+    request: { projectId: scopedProjectId ?? '', flowId },
+    enabled,
   });
-
-  const checkAccess = (permission: Permission) => {
-    if (isLoading || edition === ApEdition.COMMUNITY) {
-      return true;
-    }
-
-    return projectRole?.permissions?.includes(permission) ?? true;
+  const permissions = data?.permissions;
+  const checkAccess = (permission: Permission) =>
+    resolvePermission({
+      permission,
+      permissions,
+      isLoading: isLoading || !enabled,
+    });
+  return {
+    checkAccess,
+    canManageAccess: data?.canManageAccess ?? false,
+    isLoading: enabled && isLoading,
+    isError,
   };
+};
 
+export const useAuthorization = (projectId?: string) => {
+  const contextFlowId = useContext(FlowAccessContext);
+  const { checkAccess, isLoading } = useEffectivePermissions({
+    projectId,
+    flowId: contextFlowId,
+  });
   return { checkAccess, isFetchingProjectRole: isLoading };
+};
+
+export const useFlowAccess = (flowId: string) => {
+  const { checkAccess, canManageAccess, isLoading, isError } =
+    useEffectivePermissions({ flowId });
+  return { checkAccess, canManageAccess, isLoading, isError };
 };
 
 export const useIsPlatformAdmin = () => {
@@ -53,3 +85,5 @@ export const useIsPlatformPrivileged = () => {
     platformRole === PlatformRole.OPERATOR
   );
 };
+
+export { FlowAccessProvider };

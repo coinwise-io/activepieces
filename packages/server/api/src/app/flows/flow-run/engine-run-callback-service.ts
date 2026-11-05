@@ -1,4 +1,4 @@
-import { isNil, tryCatch } from '@activepieces/core-utils'
+import { isNil, isObject, tryCatch } from '@activepieces/core-utils'
 import { ApEdition, ExecutioOutputFile, FileCompression, FileType, FlowRunStatus, isFlowRunStateTerminal, logSerializer, RunInternalError, RunInternalErrorSource, SendFlowResponseRequest, StreamStepProgress, truncateFailedStepMessage, UpdateStepProgressRequest, UploadRunLogsRequest, WebsocketClientEvent } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
@@ -13,11 +13,11 @@ import { runsMetadataQueue } from './flow-runs-queue'
 
 export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
     updateRunProgress({ projectId, request }: UpdateRunProgressParams): void {
-        websocketService.to(projectId).emit(WebsocketClientEvent.UPDATE_RUN_PROGRESS, request)
+        websocketService.toRunViewers({ projectId, triggeredBy: triggeredByOfRunProgress(request) }).emit(WebsocketClientEvent.UPDATE_RUN_PROGRESS, request)
     },
 
-    updateStepProgress({ projectId, request }: UpdateStepProgressParams): void {
-        websocketService.to(projectId).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, request)
+    updateStepProgress({ projectId, request, triggeredBy }: UpdateStepProgressParams): void {
+        websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, request)
     },
 
     async sendFlowResponse({ request }: SendFlowResponseParams): Promise<void> {
@@ -27,7 +27,7 @@ export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
         )
     },
 
-    async uploadRunLog({ projectId, request }: UploadRunLogParams): Promise<void> {
+    async uploadRunLog({ projectId, request, triggeredBy }: UploadRunLogParams): Promise<void> {
         const internalErrorEnabled = request.internalError?.source === RunInternalErrorSource.ENGINE || system.getEdition() !== ApEdition.CLOUD
         const internalError = internalErrorEnabled ? request.internalError : undefined
         const isTerminal = !isNil(request.status) && isFlowRunStateTerminal({ status: request.status, ignoreInternalError: false })
@@ -74,10 +74,10 @@ export const engineRunCallbackService = (log: FastifyBaseLogger) => ({
         if (request.stepResponse && request.streamStepProgress === StreamStepProgress.WEBSOCKET) {
             const stepData = { ...request.stepResponse, projectId }
             if (!isTerminal) {
-                websocketService.to(projectId).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, stepData)
+                websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_PROGRESS, stepData)
             }
             else {
-                websocketService.to(projectId).emit(WebsocketClientEvent.TEST_STEP_FINISHED, stepData)
+                websocketService.toRunViewers({ projectId, triggeredBy }).emit(WebsocketClientEvent.TEST_STEP_FINISHED, stepData)
             }
         }
     },
@@ -91,6 +91,14 @@ const FAILED_RUN_SYNC_STATUSES = [
     FlowRunStatus.LOG_SIZE_EXCEEDED,
 ]
 const FAILED_RUN_SYNC_MESSAGE = 'The flow has failed and there is no response returned'
+
+function triggeredByOfRunProgress(request: unknown): string | null {
+    if (!isObject(request) || !isObject(request.flowRun)) {
+        return null
+    }
+    const triggeredBy = request.flowRun.triggeredBy
+    return typeof triggeredBy === 'string' ? triggeredBy : null
+}
 
 async function ensureLogsFileExists({ log, projectId, logsFileId, internalError }: EnsureLogsFileParams): Promise<void> {
     const { error } = await tryCatch(async () => {
@@ -140,6 +148,7 @@ type UpdateRunProgressParams = {
 type UpdateStepProgressParams = {
     projectId: string
     request: UpdateStepProgressRequest
+    triggeredBy: string | null
 }
 
 type SendFlowResponseParams = {
@@ -149,6 +158,7 @@ type SendFlowResponseParams = {
 type UploadRunLogParams = {
     projectId: string
     request: UploadRunLogsRequest
+    triggeredBy?: string | null
 }
 
 type EnsureLogsFileParams = {

@@ -2,7 +2,6 @@ export { flowsApi } from './api/flows-api';
 export { sampleDataApi } from './api/sample-data-api';
 export { triggerEventsApi } from './api/trigger-events-api';
 export { triggerRunHooks } from './api/trigger-run-api';
-export { ChangeOwnerDialog } from './components/change-owner-dialog';
 export { FlowStatusToggle } from './components/flow-status-toggle';
 export { FlowVersionStateDot } from './components/flow-version-state-dot';
 export { ImportFlowDialog } from './components/import-flow-dialog';

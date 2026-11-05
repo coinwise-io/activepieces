@@ -1,4 +1,4 @@
-import { isNil, Permission } from '@activepieces/core-utils'
+import { isNil } from '@activepieces/core-utils'
 import { FlowStatus, McpOAuthClientKey, McpProperty, McpServer as McpServerSchema, McpToolDefinition, mcpToolNameUtils, McpToolResult, McpTrigger, PopulatedFlow, PopulatedMcpServer, ProjectScopedMcpServer, TelemetryEventName } from '@activepieces/shared'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { FastifyBaseLogger } from 'fastify'
@@ -10,7 +10,8 @@ import { telemetry } from '../helper/telemetry.utils'
 import { WebhookFlowVersionToRun, webhookService } from '../webhooks/webhook.service'
 import { McpActivityContext, withActivityRecording } from './activity/mcp-activity-recorder'
 import { mcpAccess } from './mcp-access'
-import { ALLOW_ALL, deny, PermissionChecker, resolveMcpPermissionChecker, resolvePermissionChecker } from './mcp-permissions'
+import { mcpFlowAccess } from './mcp-flow-access'
+import { deny, PermissionChecker, READ_ONLY_CHECKER, resolveMcpPermissionChecker, resolvePermissionChecker } from './mcp-permissions'
 import { mcpProjectSelection, ProjectSelectionScope } from './mcp-project-selection'
 import { mcpToolInput } from './mcp-tool-input'
 import { McpCallBilling, mcpUsageTracker, withCallBilling } from './mcp-usage-tracker'
@@ -78,9 +79,9 @@ export async function buildMcpServer({ mcp, userId, platformId, platformDisabled
         const resolveChecker = isInAppChat ? resolvePermissionChecker : resolveMcpPermissionChecker
         const permissionChecker = userId
             ? await resolveChecker({ userId, projectId, log })
-            : ALLOW_ALL
+            : READ_ONLY_CHECKER
         const activityContext: McpActivityContext | null = isNil(platformId) || isNil(userId) ? null : { platformId, projectId, userId, clientKey }
-        registerFlowTools({ server, mcp, projectId, permissionChecker, billing, log })
+        await registerFlowTools({ server, mcp, projectId, userId, billing, log })
         registerStaticTools({ server, mcp, projectId, userId, platformDisabledTools, permissionChecker, activityContext, billing, log })
     }
     else if (!isNil(mcp.platformId) && !isNil(userId) && !isNil(resolveProjectMcp)) {
@@ -199,26 +200,30 @@ function noProjectSelectedResult(): McpToolResult {
     return deny(`No project selected. Use ${SET_PROJECT_CONTEXT_TOOL_NAME} to select a project first.`)
 }
 
-function registerFlowTools({ server, mcp, projectId, permissionChecker, billing, log }: RegisterToolsParams): void {
-    const enabledFlows = mcp.flows.filter((flow) => flow.status === FlowStatus.ENABLED)
-    for (const flow of enabledFlows) {
+async function registerFlowTools({ server, mcp, projectId, userId, billing, log }: RegisterFlowToolsParams): Promise<void> {
+    const access = await mcpFlowAccess.resolve({ userId, projectId, log })
+    if (isNil(access)) {
+        return
+    }
+    const runnableFlows = mcp.flows.filter((flow) => flow.status === FlowStatus.ENABLED && mcpFlowAccess.canRun({ access, flow }))
+    for (const flow of runnableFlows) {
         const { toolName: mcpToolNameInput, toolDescription, mcpInputs, returnsResponse } = extractMcpTriggerInput(flow)
         const zodFromInputSchema = mcpToolInput.modelInputShape({ properties: mcpInputs })
 
         const baseName = (mcpToolNameInput ?? flow.version.displayName) + '_' + flow.id.substring(0, 4)
         const toolName = mcpToolNameUtils.createToolName(baseName)
 
-        const flowPermissionError = permissionChecker.check(Permission.WRITE_RUN, toolName)
         server.registerTool(toolName, { title: toolName, description: toolDescription, inputSchema: zodFromInputSchema, annotations: FLOW_TOOL_ANNOTATIONS }, async (args: Record<string, unknown>) => {
-            if (flowPermissionError) {
-                return flowPermissionError
+            const currentAccess = access.unrestricted ? access : await mcpFlowAccess.resolve({ userId, projectId, log })
+            if (isNil(currentAccess) || !mcpFlowAccess.canRun({ access: currentAccess, flow })) {
+                return deny(`❌ Permission denied: you are not allowed to run "${toolName}".`)
             }
             const refusal = await billing.refusalWhenOutOfCredits({ toolName })
             if (!isNil(refusal)) {
                 return refusal
             }
 
-            const result = await runFlowAsTool({ flow, properties: mcpInputs, payload: args, returnsResponse, log })
+            const result = await runFlowAsTool({ flow, properties: mcpInputs, payload: args, returnsResponse, triggeredBy: userId, log })
 
             rejectedPromiseHandler(telemetry(log).trackProject({
                 projectId,
@@ -254,11 +259,12 @@ export async function resolveRunnableFlow({ flow, projectId, log }: {
     return flowService(log).getOnePopulatedOrThrow({ id: flow.id, projectId, versionId: flow.publishedVersionId })
 }
 
-export async function runFlowAsTool({ flow, properties, payload, returnsResponse, log }: {
+export async function runFlowAsTool({ flow, properties, payload, returnsResponse, triggeredBy, log }: {
     flow: PopulatedFlow
     properties: McpProperty[]
     payload: Record<string, unknown>
     returnsResponse: boolean
+    triggeredBy?: string
     log: FastifyBaseLogger
 }): Promise<McpToolResult> {
     const flowId = flow.id
@@ -279,6 +285,7 @@ export async function runFlowAsTool({ flow, properties, payload, returnsResponse
         execute: true,
         failParentOnFailure: false,
         timeoutMs: system.getNumberOrThrow(AppSystemProp.FLOW_TIMEOUT_SECONDS) * 1000,
+        triggeredBy,
     })
     const isOkay = Math.floor(response.status / 100) === 2
 
@@ -344,6 +351,15 @@ function buildToolConfig(tool: McpToolDefinition): Record<string, unknown> {
 export const FLOW_TOOL_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
 export const LOCKED_PLACEHOLDER_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
 export const CONTROLLABLE_PLACEHOLDER_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
+
+type RegisterFlowToolsParams = {
+    server: McpServer
+    mcp: PopulatedMcpServer
+    projectId: string
+    userId: string | undefined
+    billing: McpCallBilling
+    log: FastifyBaseLogger
+}
 
 type RegisterToolsParams = {
     server: McpServer

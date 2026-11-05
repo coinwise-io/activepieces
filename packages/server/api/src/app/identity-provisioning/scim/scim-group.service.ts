@@ -3,6 +3,7 @@ import { CreateScimGroupRequest, parseScimFilter, ReplaceScimGroupRequest, SCIM_
 import { EntityManager, In } from 'typeorm'
 import { z } from 'zod'
 import { transaction } from '../../core/db/transaction'
+import { websocketService } from '../../core/websockets.service'
 import { userRepo } from '../../user/user-service'
 import { UserGroupSchema } from '../user-group/user-group.entity'
 import { userGroupMemberRepo, userGroupRepo } from '../user-group/user-group.service'
@@ -89,7 +90,9 @@ export const scimGroupService = {
     },
     async delete({ platformId, id }: { platformId: string, id: string }): Promise<void> {
         const group = await findGroupOrThrow({ platformId, id })
+        const membersByGroup = await loadMemberIds({ groupIds: [group.id] })
         await userGroupRepo().delete({ id: group.id, platformId })
+        await websocketService.refreshAccessForUsers({ userIds: membersByGroup.get(group.id) ?? [] })
     },
 }
 
@@ -126,6 +129,7 @@ async function persistState({ platformId, group, currentMemberIds, next }: Persi
         }
         await insertMembers({ entityManager, groupId: group.id, userIds: added })
     })
+    await websocketService.refreshAccessForUsers({ userIds: [...removed, ...added] })
 }
 
 async function insertMembers({ entityManager, groupId, userIds }: { entityManager: EntityManager, groupId: string, userIds: string[] }): Promise<void> {
