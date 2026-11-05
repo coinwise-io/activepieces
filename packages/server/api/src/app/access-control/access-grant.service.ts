@@ -135,20 +135,21 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
                 params: { message: 'Provide either folderId or flowId, not both' },
             })
         }
+        const acceptsGrants = await projectAcceptsGrants({ projectId, log })
         if (!isNil(folderId)) {
             const target = await resolveTarget({ projectId, request: { projectId, folderId } })
             assertTargetNotHidden({ access, target })
             return {
                 roles: accessPolicy.rolesOnFolder({ access, folderId }),
                 permissions: accessPolicy.permissionsOnFolder({ access, folderId }),
-                canManageAccess: accessPolicy.canManageAccess({ access, target: { folderId: target.folderId } }),
+                canManageAccess: acceptsGrants && accessPolicy.canManageAccess({ access, target: { folderId: target.folderId } }),
             }
         }
         if (isNil(flowId)) {
             return {
                 roles: accessPolicy.rolesOnProject({ access }),
                 permissions: access.permissions,
-                canManageAccess: accessPolicy.canManageAccess({ access, target: {} }),
+                canManageAccess: acceptsGrants && accessPolicy.canManageAccess({ access, target: {} }),
             }
         }
         const flow = await loadFlowRef({ projectId, flowId })
@@ -156,7 +157,7 @@ export const accessGrantService = (log: FastifyBaseLogger) => ({
         return {
             roles: accessPolicy.rolesOnFlow({ access, flow }),
             permissions: accessPolicy.permissionsOnFlow({ access, flow }),
-            canManageAccess: accessPolicy.canManageAccess({ access, target: { flow } }),
+            canManageAccess: acceptsGrants && accessPolicy.canManageAccess({ access, target: { flow } }),
         }
     },
 
@@ -241,6 +242,11 @@ async function loadFlowRef({ projectId, flowId }: { projectId: ProjectId, flowId
         })
     }
     return { id: flow.id, folderId: flow.folderId ?? null }
+}
+
+async function projectAcceptsGrants({ projectId, log }: { projectId: ProjectId, log: FastifyBaseLogger }): Promise<boolean> {
+    const project = await projectService(log).getOneOrThrow(projectId)
+    return project.type === ProjectType.TEAM
 }
 
 function rolesOnTarget({ access, target }: { access: ProjectAccess, target: ResolvedTarget }): AccessRole[] {

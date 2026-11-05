@@ -309,6 +309,25 @@ describe('Effective access', () => {
         expect(onGranted.json().permissions).toContain(Permission.WRITE_FLOW)
         expect(onOther.statusCode).toBe(StatusCodes.NOT_FOUND)
     })
+
+    it('never offers access management on a personal project, even to its owner', async () => {
+        const { memberOne } = await accessTestUtils.setup(app)
+        const flow = await accessTestUtils.createFlow({ ctx: memberOne })
+        const folder = await accessTestUtils.createFolder({ ctx: memberOne })
+
+        const onProject = await memberOne.get('/v1/access-grants/effective', { projectId: memberOne.project.id })
+        const onFlow = await memberOne.get('/v1/access-grants/effective', { projectId: memberOne.project.id, flowId: flow.id })
+        const onFolder = await memberOne.get('/v1/access-grants/effective', { projectId: memberOne.project.id, folderId: folder.id })
+
+        expect(memberOne.project.type).toBe(ProjectType.PERSONAL)
+        expect(onProject.statusCode).toBe(StatusCodes.OK)
+        expect(onProject.json().canManageAccess).toBe(false)
+        expect(onFlow.statusCode).toBe(StatusCodes.OK)
+        expect(onFlow.json().canManageAccess).toBe(false)
+        expect(onFlow.json().permissions).toContain(Permission.WRITE_FLOW)
+        expect(onFolder.statusCode).toBe(StatusCodes.OK)
+        expect(onFolder.json().canManageAccess).toBe(false)
+    })
 })
 
 describe('Access principals', () => {
